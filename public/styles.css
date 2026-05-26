@@ -335,6 +335,21 @@ button:not(:disabled):hover {
   line-height: 1.55;
 }
 
+.asset-strip {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.asset-strip span {
+  border: 1px solid #3a312d;
+  border-radius: 7px;
+  color: #d8d0c8;
+  background: #0e0e0d;
+  font-size: 12px;
+  padding: 7px 9px;
+}
+
 .video-slot {
   min-height: 280px;
   border: 1px dashed #463b35;
@@ -375,6 +390,8 @@ button:not(:disabled):hover {
   background:
     linear-gradient(180deg, rgba(0, 0, 0, 0), rgba(0, 0, 0, 0.72)),
     linear-gradient(135deg, #291014, #121d19 58%, #5e3d17);
+  background-size: cover;
+  background-position: center;
   display: flex;
   align-items: end;
   padding: 13px;

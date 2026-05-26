@@ -91,8 +91,14 @@ app.post("/api/stories/:id/tts", async (req, res, next) => {
 app.post("/api/stories/:id/render", async (req, res, next) => {
   try {
     const story = await requireStory(req.params.id);
-    const video = await renderDraftVideo(story);
-    story.assets.video = video;
+    const rendered = await renderDraftVideo(story);
+    story.assets.video = rendered.video;
+    const images = [...(story.assets.images || [])];
+    for (const image of rendered.fallbackImages || []) {
+      if (images.some((item) => item.sceneIndex === image.sceneIndex)) continue;
+      images.push(image);
+    }
+    story.assets.images = images;
     story.status = "rendered";
     story.updatedAt = nowIso();
     await saveStory(story);

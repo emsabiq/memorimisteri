@@ -12,16 +12,19 @@ export async function renderDraftVideo(story) {
   const workDir = path.join(paths.storyboardDir, story.id);
   await fs.mkdir(workDir, { recursive: true });
   await fs.mkdir(paths.videoDir, { recursive: true });
+  await fs.mkdir(paths.imageDir, { recursive: true });
 
   const segmentPaths = [];
+  const fallbackImages = [];
   const scenes = buildRenderScenes(story);
   for (const scene of scenes) {
-    const imagePath = await resolveSceneImage(story, scene, workDir);
+    const image = await resolveSceneImage(story, scene, workDir);
+    if (image.asset) fallbackImages.push(image.asset);
     const textPath = path.join(workDir, `scene-${scene.index}-text.txt`);
     const caption = splitLines(scene.screenText || scene.narration, 22).join("\n");
     await fs.writeFile(textPath, caption || "Kisah Malam Ini");
     const segmentPath = path.join(workDir, `scene-${scene.index}.mp4`);
-    await makeSegment({ imagePath, textPath, scene, segmentPath });
+    await makeSegment({ imagePath: image.path, textPath, scene, segmentPath });
     segmentPaths.push(segmentPath);
   }
 
@@ -30,18 +33,24 @@ export async function renderDraftVideo(story) {
 
   const filename = `${story.id}-${safeFilename(story.title)}.mp4`;
   const outputPath = path.join(paths.videoDir, filename);
-  const args = ["-y", "-f", "concat", "-safe", "0", "-i", concatPath];
-  if (story.assets?.audio?.path) args.push("-i", story.assets.audio.path, "-shortest");
-  args.push("-c:v", "libx264", "-pix_fmt", "yuv420p");
-  if (story.assets?.audio?.path) args.push("-c:a", "aac", "-b:a", "160k");
+  const totalDuration = scenes.reduce((sum, scene) => sum + Math.max(1.5, Number(scene.durationSec || 4)), 0);
+  const fallbackAudioPath = path.join(workDir, "fallback-horror-bed.m4a");
+  const audioPath = story.assets?.audio?.path || await makeFallbackAudio({ outputPath: fallbackAudioPath, duration: totalDuration });
+
+  const args = ["-y", "-f", "concat", "-safe", "0", "-i", concatPath, "-i", audioPath];
+  args.push("-map", "0:v:0", "-map", "1:a:0", "-shortest", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "160k");
   args.push(outputPath);
   await runFfmpeg(args);
 
   return {
-    path: outputPath,
-    url: `/generated/videos/${filename}`,
-    renderedAt: nowIso(),
-    scenes: segmentPaths.length
+    video: {
+      path: outputPath,
+      url: `/generated/videos/${filename}`,
+      renderedAt: nowIso(),
+      scenes: segmentPaths.length,
+      audio: story.assets?.audio?.path ? "tts" : "fallback-horror-bed"
+    },
+    fallbackImages
   };
 }
 
@@ -65,10 +74,27 @@ function buildRenderScenes(story) {
 
 async function resolveSceneImage(story, scene, workDir) {
   const existing = story.assets?.images?.find((item) => item.sceneIndex === scene.index);
-  if (existing?.path) return existing.path;
+  if (existing?.path) return { path: existing.path, asset: null };
   const ppmPath = path.join(workDir, `scene-${scene.index}.ppm`);
   await createMoodPpm(ppmPath, scene);
-  return ppmPath;
+
+  if (scene.index > 0 && scene.index < 99) {
+    const filename = `${story.id}-scene-${scene.index}-preview.png`;
+    const previewPath = path.join(paths.imageDir, filename);
+    await makeScenePreviewPng({ imagePath: ppmPath, outputPath: previewPath });
+    return {
+      path: ppmPath,
+      asset: {
+        sceneIndex: scene.index,
+        path: previewPath,
+        url: `/generated/images/${filename}`,
+        prompt: scene.imagePrompt,
+        source: "local-fallback"
+      }
+    };
+  }
+
+  return { path: ppmPath, asset: null };
 }
 
 async function createMoodPpm(outputPath, scene) {
@@ -140,6 +166,62 @@ async function makeSegment({ imagePath, textPath, scene, segmentPath }) {
     "yuv420p",
     segmentPath
   ]);
+}
+
+async function makeScenePreviewPng({ imagePath, outputPath }) {
+  await runFfmpeg([
+    "-y",
+    "-i",
+    imagePath,
+    "-vf",
+    `scale=${width}:${height}:force_original_aspect_ratio=increase,crop=${width}:${height},eq=contrast=1.08:saturation=0.86:brightness=-0.035`,
+    "-frames:v",
+    "1",
+    outputPath
+  ]);
+}
+
+async function makeFallbackAudio({ outputPath, duration }) {
+  const fadeOutAt = Math.max(0.5, duration - 0.7).toFixed(2);
+  const filter = [
+    "[0:a]volume=0.035[a0]",
+    "[1:a]volume=0.018[a1]",
+    "[2:a]volume=0.055[a2]",
+    `[a0][a1][a2]amix=inputs=3:duration=longest,lowpass=f=2400,afade=t=in:st=0:d=0.45,afade=t=out:st=${fadeOutAt}:d=0.65[a]`
+  ].join(";");
+
+  await runFfmpeg([
+    "-y",
+    "-f",
+    "lavfi",
+    "-t",
+    String(duration),
+    "-i",
+    "sine=frequency=48:sample_rate=44100",
+    "-f",
+    "lavfi",
+    "-t",
+    String(duration),
+    "-i",
+    "sine=frequency=91:sample_rate=44100",
+    "-f",
+    "lavfi",
+    "-t",
+    String(duration),
+    "-i",
+    "anoisesrc=color=brown:amplitude=0.11:sample_rate=44100",
+    "-filter_complex",
+    filter,
+    "-map",
+    "[a]",
+    "-c:a",
+    "aac",
+    "-b:a",
+    "128k",
+    outputPath
+  ]);
+
+  return outputPath;
 }
 
 function runFfmpeg(args) {

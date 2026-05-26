@@ -14,6 +14,8 @@ const els = {
   storyTitle: document.querySelector("#storyTitle"),
   sourceBadge: document.querySelector("#sourceBadge"),
   logline: document.querySelector("#logline"),
+  imageStatus: document.querySelector("#imageStatus"),
+  audioStatus: document.querySelector("#audioStatus"),
   tokenMetric: document.querySelector("#tokenMetric"),
   imageMetric: document.querySelector("#imageMetric"),
   ttsMetric: document.querySelector("#ttsMetric"),
@@ -172,6 +174,14 @@ function renderCurrent() {
   els.storyTitle.textContent = story.title;
   els.sourceBadge.textContent = story.source === "openai" ? "OpenAI" : "Offline";
   els.logline.textContent = story.plan.logline;
+  els.imageStatus.textContent = `Gambar: ${story.assets.images?.length || 0}/${story.plan.scenes.length} scene`;
+  els.audioStatus.textContent = story.assets.video?.audio === "tts"
+    ? "Suara: TTS"
+    : story.assets.video?.audio === "fallback-horror-bed"
+      ? "Suara: ambience horor"
+      : story.assets.audio?.url
+        ? "Suara: TTS siap"
+        : "Suara: belum dirender";
   els.previewHook.textContent = story.plan.hook;
   els.previewText.textContent = story.plan.scenes[0]?.screenText || story.title;
   els.tokenMetric.textContent = formatNumber(story.cost.totalTokens);
@@ -198,7 +208,7 @@ function renderCurrent() {
   }).join("");
 
   if (story.assets.video?.url) {
-    els.videoSlot.innerHTML = `<video controls src="${story.assets.video.url}"></video>`;
+    els.videoSlot.innerHTML = `<video controls playsinline src="${story.assets.video.url}"></video>`;
   } else {
     els.videoSlot.textContent = "Video draft belum dirender";
   }
