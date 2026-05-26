@@ -45,9 +45,29 @@ app.get("/api/stories/:id", async (req, res, next) => {
 
 app.post("/api/stories", async (req, res, next) => {
   try {
-    const story = await createStoryDraft(req.body || {});
+    const story = await createUniqueStory(req.body || {});
     await saveStory(story);
     res.json({ story });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/stories/full", async (req, res, next) => {
+  try {
+    const warnings = [];
+    const story = await createUniqueStory(req.body || {});
+    await saveStory(story);
+
+    if (config.openai.apiKey) {
+      await ensureStoryImages(story, { warnings });
+      await ensureStoryAudio(story, { warnings });
+    } else {
+      warnings.push("OPENAI_API_KEY belum aktif, gambar dan suara memakai fallback lokal.");
+    }
+
+    await renderAndPersist(story);
+    res.json({ story, warnings });
   } catch (error) {
     next(error);
   }
@@ -56,16 +76,8 @@ app.post("/api/stories", async (req, res, next) => {
 app.post("/api/stories/:id/images", async (req, res, next) => {
   try {
     const story = await requireStory(req.params.id);
-    const size = req.body?.size || story.input.imageSize || config.openai.imageSize;
-    const quality = req.body?.quality || story.input.imageQuality || config.openai.imageQuality;
     const limit = Math.max(1, Math.min(Number(req.body?.limit || story.plan.scenes.length), story.plan.scenes.length));
-    const images = [...(story.assets.images || [])];
-    for (const scene of story.plan.scenes.slice(0, limit)) {
-      if (images.some((item) => item.sceneIndex === scene.index)) continue;
-      const image = await generateSceneImage({ storyId: story.id, scene, size, quality });
-      images.push(image);
-    }
-    story.assets.images = images;
+    await ensureStoryImages(story, { limit, strict: true });
     story.updatedAt = nowIso();
     await saveStory(story);
     res.json({ story });
@@ -77,9 +89,7 @@ app.post("/api/stories/:id/images", async (req, res, next) => {
 app.post("/api/stories/:id/tts", async (req, res, next) => {
   try {
     const story = await requireStory(req.params.id);
-    const text = story.plan.scenes.map((scene) => scene.narration).join("\n\n");
-    const audio = await generateSpeech({ storyId: story.id, text });
-    story.assets.audio = audio;
+    await ensureStoryAudio(story, { force: true });
     story.updatedAt = nowIso();
     await saveStory(story);
     res.json({ story });
@@ -91,18 +101,13 @@ app.post("/api/stories/:id/tts", async (req, res, next) => {
 app.post("/api/stories/:id/render", async (req, res, next) => {
   try {
     const story = await requireStory(req.params.id);
-    const rendered = await renderDraftVideo(story);
-    story.assets.video = rendered.video;
-    const images = [...(story.assets.images || [])];
-    for (const image of rendered.fallbackImages || []) {
-      if (images.some((item) => item.sceneIndex === image.sceneIndex)) continue;
-      images.push(image);
+    const warnings = [];
+    if (req.body?.ensureAssets !== false && config.openai.apiKey) {
+      await ensureStoryImages(story, { warnings });
+      await ensureStoryAudio(story, { warnings });
     }
-    story.assets.images = images;
-    story.status = "rendered";
-    story.updatedAt = nowIso();
-    await saveStory(story);
-    res.json({ story });
+    await renderAndPersist(story);
+    res.json({ story, warnings });
   } catch (error) {
     next(error);
   }
@@ -136,4 +141,70 @@ async function requireStory(id) {
     throw error;
   }
   return story;
+}
+
+async function createUniqueStory(input) {
+  const existingStories = await listStories();
+  return createStoryDraft(input, { existingStories });
+}
+
+async function ensureStoryImages(story, options = {}) {
+  const warnings = options.warnings || [];
+  const size = options.size || story.input.imageSize || config.openai.imageSize;
+  const quality = options.quality || story.input.imageQuality || config.openai.imageQuality;
+  const limit = Math.max(1, Math.min(Number(options.limit || story.plan.scenes.length), story.plan.scenes.length));
+  const images = [...(story.assets.images || [])];
+  let failures = 0;
+
+  for (const scene of story.plan.scenes.slice(0, limit)) {
+    if (images.some((item) => item.sceneIndex === scene.index)) continue;
+    try {
+      const image = await generateSceneImage({ storyId: story.id, scene, size, quality });
+      images.push(image);
+      story.assets.images = sortImages(images);
+      story.updatedAt = nowIso();
+      await saveStory(story);
+    } catch (error) {
+      failures += 1;
+      const message = `Gambar scene ${scene.index} gagal: ${error.message}`;
+      if (options.strict) throw new Error(message);
+      warnings.push(message);
+      if (failures >= 2) break;
+    }
+  }
+
+  story.assets.images = sortImages(images);
+}
+
+async function ensureStoryAudio(story, options = {}) {
+  const warnings = options.warnings || [];
+  if (story.assets.audio?.path && !options.force) return;
+  try {
+    const text = story.plan.scenes.map((scene) => scene.narration).join("\n\n");
+    story.assets.audio = await generateSpeech({ storyId: story.id, text });
+    story.updatedAt = nowIso();
+    await saveStory(story);
+  } catch (error) {
+    if (options.strict) throw error;
+    warnings.push(`TTS gagal: ${error.message}`);
+  }
+}
+
+async function renderAndPersist(story) {
+  const rendered = await renderDraftVideo(story);
+  story.assets.video = rendered.video;
+  const images = [...(story.assets.images || [])];
+  for (const image of rendered.fallbackImages || []) {
+    if (images.some((item) => item.sceneIndex === image.sceneIndex)) continue;
+    images.push(image);
+  }
+  story.assets.images = sortImages(images);
+  story.status = "rendered";
+  story.updatedAt = nowIso();
+  await saveStory(story);
+  return story;
+}
+
+function sortImages(images) {
+  return [...images].sort((a, b) => Number(a.sceneIndex || 0) - Number(b.sceneIndex || 0));
 }

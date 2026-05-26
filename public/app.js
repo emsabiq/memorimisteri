@@ -25,6 +25,8 @@ const els = {
   sceneCountBadge: document.querySelector("#sceneCountBadge"),
   sceneGrid: document.querySelector("#sceneGrid"),
   videoSlot: document.querySelector("#videoSlot"),
+  fullGenerateBtn: document.querySelector("#fullGenerateBtn"),
+  fullGenerateTopBtn: document.querySelector("#fullGenerateTopBtn"),
   imageBtn: document.querySelector("#imageBtn"),
   ttsBtn: document.querySelector("#ttsBtn"),
   renderBtn: document.querySelector("#renderBtn"),
@@ -45,6 +47,8 @@ function bindEvents() {
     event.preventDefault();
     await createStory(new FormData(els.form));
   });
+  els.fullGenerateBtn.addEventListener("click", () => createFullStory(new FormData(els.form)));
+  els.fullGenerateTopBtn.addEventListener("click", () => createFullStory(new FormData(els.form)));
   els.imageBtn.addEventListener("click", () => generateImages());
   els.ttsBtn.addEventListener("click", () => generateTts());
   els.renderBtn.addEventListener("click", () => renderVideo());
@@ -55,7 +59,7 @@ async function loadHealth() {
   state.config = data.config;
   const provider = state.config.providers.openai ? "OpenAI aktif" : "Offline draft";
   const ffmpeg = data.tools.ffmpeg ? "FFmpeg siap" : "FFmpeg tidak terbaca";
-  els.runtimeStatus.textContent = `${provider} · ${ffmpeg}`;
+  els.runtimeStatus.textContent = `${provider} - ${ffmpeg}`;
   els.publishStatus.textContent = state.config.automation.enabled ? "Enabled" : "Disabled";
 }
 
@@ -76,6 +80,26 @@ async function createStory(formData) {
     state.current = data.story;
     await loadStories();
     toast("Draft cerita siap.");
+  } catch (error) {
+    toast(error.message);
+  } finally {
+    setBusy(false);
+    render();
+  }
+}
+
+async function createFullStory(formData) {
+  setBusy(true, "Generate lengkap: cerita, gambar, TTS, render");
+  try {
+    const payload = Object.fromEntries(formData.entries());
+    const data = await api("/api/stories/full", {
+      method: "POST",
+      body: JSON.stringify(payload)
+    });
+    state.current = data.story;
+    await loadStories();
+    const warning = data.warnings?.length ? ` (${data.warnings.length} warning)` : "";
+    toast(`Video lengkap selesai${warning}.`);
   } catch (error) {
     toast(error.message);
   } finally {
@@ -127,12 +151,16 @@ async function generateTts() {
 
 async function renderVideo() {
   if (!state.current) return toast("Buat draft dulu.");
-  setBusy(true, "Render video berjalan");
+  setBusy(true, "Render video dan lengkapi aset");
   try {
-    const data = await api(`/api/stories/${state.current.id}/render`, { method: "POST" });
+    const data = await api(`/api/stories/${state.current.id}/render`, {
+      method: "POST",
+      body: JSON.stringify({ ensureAssets: true })
+    });
     state.current = data.story;
     await loadStories();
-    toast("Video draft selesai.");
+    const warning = data.warnings?.length ? ` (${data.warnings.length} warning)` : "";
+    toast(`Video draft selesai${warning}.`);
   } catch (error) {
     toast(error.message);
   } finally {
@@ -175,7 +203,7 @@ function renderCurrent() {
   els.sourceBadge.textContent = story.source === "openai" ? "OpenAI" : "Offline";
   els.logline.textContent = story.plan.logline;
   els.imageStatus.textContent = `Gambar: ${story.assets.images?.length || 0}/${story.plan.scenes.length} scene`;
-  els.audioStatus.textContent = story.assets.video?.audio === "tts"
+  els.audioStatus.textContent = story.assets.video?.audio?.startsWith("tts")
     ? "Suara: TTS"
     : story.assets.video?.audio === "local-voice-horror-bed"
       ? "Suara: voice Indonesia lokal + ambience"
@@ -201,7 +229,7 @@ function renderCurrent() {
           <strong>${escapeHtml(scene.screenText)}</strong>
         </div>
         <div class="scene-body">
-          <small>${scene.durationSec}s · ${escapeHtml(scene.transition)} · ${escapeHtml(scene.effect)}</small>
+          <small>${scene.durationSec}s / ${escapeHtml(scene.transition)} / ${escapeHtml(scene.effect)}</small>
           <p>${escapeHtml(scene.narration)}</p>
           <div class="prompt">${escapeHtml(scene.imagePrompt)}</div>
         </div>
@@ -218,6 +246,8 @@ function renderCurrent() {
 
 function renderButtons() {
   const hasStory = Boolean(state.current);
+  els.fullGenerateBtn.disabled = state.busy;
+  els.fullGenerateTopBtn.disabled = state.busy;
   els.imageBtn.disabled = state.busy || !hasStory || !state.config?.providers.openai;
   els.ttsBtn.disabled = state.busy || !hasStory || !state.config?.providers.openai;
   els.renderBtn.disabled = state.busy || !hasStory;

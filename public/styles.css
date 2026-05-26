@@ -139,6 +139,12 @@ select:focus {
   gap: 10px;
 }
 
+.form-actions {
+  display: grid;
+  grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr);
+  gap: 10px;
+}
+
 .primary,
 .secondary {
   min-height: 42px;
@@ -475,7 +481,8 @@ button:not(:disabled):hover {
   }
 
   .metric-grid,
-  .field-grid {
+  .field-grid,
+  .form-actions {
     grid-template-columns: 1fr;
   }
 }

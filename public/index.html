@@ -37,9 +37,9 @@
             <label>
               <span>Durasi</span>
               <select name="durationSec">
-                <option value="30">30 detik</option>
-                <option value="60" selected>60 detik</option>
-                <option value="90">90 detik</option>
+                <option value="50">50 detik</option>
+                <option value="55" selected>55 detik</option>
+                <option value="60">60 detik</option>
               </select>
             </label>
             <label>
@@ -61,7 +61,10 @@
             <input name="tone" value="seram pelan, realistis, seperti cerita pengalaman pribadi">
           </label>
 
-          <button class="primary" type="submit">Buat draft</button>
+          <div class="form-actions">
+            <button class="secondary" type="submit">Buat draft</button>
+            <button id="fullGenerateBtn" class="primary" type="button">Generate baru lengkap</button>
+          </div>
         </form>
 
         <section class="panel compact">
@@ -92,6 +95,7 @@
             <h2 id="storyTitle">Belum ada draft</h2>
           </div>
           <div class="actions">
+            <button id="fullGenerateTopBtn" class="primary" type="button">Generate baru</button>
             <button id="imageBtn" class="secondary" type="button">Gambar scene</button>
             <button id="ttsBtn" class="secondary" type="button">TTS</button>
             <button id="renderBtn" class="primary" type="button">Render video</button>

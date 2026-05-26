@@ -2,7 +2,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { spawn } from "node:child_process";
 import { paths } from "./config.js";
-import { nowIso, safeFilename, splitLines } from "./util.js";
+import { clamp, nowIso, safeFilename, splitLines } from "./util.js";
 
 const width = 1080;
 const height = 1920;
@@ -35,9 +35,19 @@ export async function renderDraftVideo(story) {
   const outputPath = path.join(paths.videoDir, filename);
   const totalDuration = scenes.reduce((sum, scene) => sum + Math.max(1.5, Number(scene.durationSec || 4)), 0);
   const fallbackAudioPath = path.join(workDir, "fallback-horror-bed.m4a");
-  const narrationText = story.plan.scenes.map((scene) => scene.narration).join(" ");
-  const fallbackAudio = story.assets?.audio?.path ? null : await makeFallbackAudio({ outputPath: fallbackAudioPath, duration: totalDuration, text: narrationText });
-  const audioPath = story.assets?.audio?.path || fallbackAudio.path;
+  let audioPath;
+  let audioKind;
+  if (story.assets?.audio?.path) {
+    const ttsMixPath = path.join(workDir, "tts-horror-mix.m4a");
+    await makeTtsHorrorMix({ inputPath: story.assets.audio.path, outputPath: ttsMixPath, duration: totalDuration });
+    audioPath = ttsMixPath;
+    audioKind = "tts-horror-mix";
+  } else {
+    const narrationText = story.plan.scenes.map((scene) => scene.narration).join(" ");
+    const fallbackAudio = await makeFallbackAudio({ outputPath: fallbackAudioPath, duration: totalDuration, text: narrationText });
+    audioPath = fallbackAudio.path;
+    audioKind = fallbackAudio.kind;
+  }
 
   const args = ["-y", "-f", "concat", "-safe", "0", "-i", concatPath, "-i", audioPath];
   args.push("-map", "0:v:0", "-map", "1:a:0", "-shortest", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "160k");
@@ -50,28 +60,50 @@ export async function renderDraftVideo(story) {
       url: `/generated/videos/${filename}`,
       renderedAt: nowIso(),
       scenes: segmentPaths.length,
-      audio: story.assets?.audio?.path ? "tts" : fallbackAudio.kind
+      audio: audioKind,
+      durationSec: Number(totalDuration.toFixed(2))
     },
     fallbackImages
   };
 }
 
 function buildRenderScenes(story) {
+  const targetDuration = clamp(Number(story.input?.durationSec || 55), 50, 60);
+  const openingDuration = 1.6;
+  const closingDuration = 1.8;
   const opening = {
     index: 0,
-    durationSec: 2.2,
+    durationSec: openingDuration,
     screenText: story.plan.hook || story.title,
     narration: story.plan.hook || story.title,
     palette: ["#07080a", "#1d0e14", "#5b171f"]
   };
   const closing = {
     index: 99,
-    durationSec: 2.4,
+    durationSec: closingDuration,
     screenText: story.plan.ending || "Bagian berikutnya?",
     narration: story.plan.ending || "",
     palette: ["#050506", "#161616", "#453114"]
   };
-  return [opening, ...story.plan.scenes, closing];
+  const contentScenes = fitContentScenes(story.plan.scenes, targetDuration - openingDuration - closingDuration);
+  return [opening, ...contentScenes, closing];
+}
+
+function fitContentScenes(scenes, targetContentDuration) {
+  const items = [...(scenes || [])];
+  const total = items.reduce((sum, scene) => sum + Math.max(1.5, Number(scene.durationSec || 4)), 0);
+  if (!items.length || total <= 0) return items;
+
+  const scale = targetContentDuration / total;
+  let used = 0;
+  return items.map((scene, index) => {
+    const isLast = index === items.length - 1;
+    const durationSec = isLast
+      ? Math.max(1.5, Number((targetContentDuration - used).toFixed(2)))
+      : Math.max(1.5, Number((Number(scene.durationSec || 4) * scale).toFixed(2)));
+    used += durationSec;
+    return { ...scene, durationSec };
+  });
 }
 
 async function resolveSceneImage(story, scene, workDir) {
@@ -140,10 +172,10 @@ async function makeSegment({ imagePath, textPath, scene, segmentPath }) {
     `scale=${width}:${height}:force_original_aspect_ratio=increase`,
     `crop=${width}:${height}`,
     "format=yuv420p",
-    "eq=contrast=1.12:saturation=1.05:brightness=0.025",
+    "eq=contrast=1.08:saturation=1.08:brightness=0.06",
     "noise=alls=5:allf=t+u",
     "drawbox=x=0:y=0:w=iw:h=ih:color=black@0.04:t=fill",
-    `drawtext=fontfile='${font}':textfile='${textFile}':x=(w-text_w)/2:y=h*0.66:fontsize=68:fontcolor=white:line_spacing=14:box=1:boxcolor=black@0.48:boxborderw=30`,
+    `drawtext=fontfile='${font}':textfile='${textFile}':x=(w-text_w)/2:y=h*0.66:fontsize=72:fontcolor=0xf7f1e5:line_spacing=14:box=1:boxcolor=black@0.66:boxborderw=34:borderw=3:bordercolor=black@0.9`,
     "fade=t=in:st=0:d=0.16",
     `fade=t=out:st=${fadeOutAt}:d=0.25`
   ].join(",");
@@ -177,7 +209,7 @@ async function makeScenePreviewPng({ imagePath, outputPath }) {
     "-i",
     imagePath,
     "-vf",
-    `scale=${width}:${height}:force_original_aspect_ratio=increase,crop=${width}:${height},eq=contrast=1.12:saturation=1.05:brightness=0.025`,
+    `scale=${width}:${height}:force_original_aspect_ratio=increase,crop=${width}:${height},eq=contrast=1.08:saturation=1.08:brightness=0.06`,
     "-frames:v",
     "1",
     outputPath
@@ -254,6 +286,54 @@ async function makeFallbackAudio({ outputPath, duration, text }) {
     path: outputPath,
     kind: hasNarration ? "local-voice-horror-bed" : "fallback-horror-bed"
   };
+}
+
+async function makeTtsHorrorMix({ inputPath, outputPath, duration }) {
+  const fadeOutAt = Math.max(0.5, duration - 0.7).toFixed(2);
+  const filter = [
+    "[0:a]volume=1.55,aecho=0.5:0.22:72:0.13,highpass=f=80,lowpass=f=5200,dynaudnorm=f=140:g=7[n]",
+    "[1:a]volume=0.08[a0]",
+    "[2:a]volume=0.04[a1]",
+    "[3:a]volume=0.09[a2]",
+    `[n][a0][a1][a2]amix=inputs=4:duration=longest,lowpass=f=6200,alimiter=limit=0.94,afade=t=in:st=0:d=0.2,afade=t=out:st=${fadeOutAt}:d=0.65[a]`
+  ].join(";");
+
+  await runFfmpeg([
+    "-y",
+    "-i",
+    inputPath,
+    "-f",
+    "lavfi",
+    "-t",
+    String(duration),
+    "-i",
+    "sine=frequency=48:sample_rate=44100",
+    "-f",
+    "lavfi",
+    "-t",
+    String(duration),
+    "-i",
+    "sine=frequency=96:sample_rate=44100",
+    "-f",
+    "lavfi",
+    "-t",
+    String(duration),
+    "-i",
+    "anoisesrc=color=brown:amplitude=0.18:sample_rate=44100",
+    "-filter_complex",
+    filter,
+    "-map",
+    "[a]",
+    "-t",
+    String(duration),
+    "-c:a",
+    "aac",
+    "-ar",
+    "44100",
+    "-b:a",
+    "160k",
+    outputPath
+  ]);
 }
 
 function makeWindowsNarration({ textPath, outputPath }) {
