@@ -15,7 +15,7 @@ const transitionDuration = 0.45;
 const endCardDuration = 2.4;
 const subtitleOffsetSeconds = Number.isFinite(Number(process.env.SUBTITLE_OFFSET_SECONDS))
   ? Number(process.env.SUBTITLE_OFFSET_SECONDS)
-  : -0.22;
+  : -0.08;
 
 export async function renderDraftVideo(story) {
   const workDir = path.join(paths.storyboardDir, story.id);
@@ -131,16 +131,18 @@ function partLabel(episode) {
 
 function fitContentScenes(scenes, targetContentDuration) {
   const items = [...(scenes || [])];
-  const total = items.reduce((sum, scene) => sum + Math.max(1.5, Number(scene.durationSec || 4)), 0);
-  if (!items.length || total <= 0) return items;
+  if (!items.length) return items;
 
-  const scale = targetContentDuration / total;
+  const weights = items.map((scene, index) => sceneSpeechWeight(scene.narration) + (index === items.length - 1 ? 0 : 0.65));
+  const totalWeight = weights.reduce((sum, weight) => sum + weight, 0);
+  if (totalWeight <= 0) return items;
+
   let used = 0;
   return items.map((scene, index) => {
     const isLast = index === items.length - 1;
     const durationSec = isLast
       ? Math.max(1.5, Number((targetContentDuration - used).toFixed(2)))
-      : Math.max(1.5, Number((Number(scene.durationSec || 4) * scale).toFixed(2)));
+      : Math.max(1.5, Number(((targetContentDuration * weights[index]) / totalWeight).toFixed(2)));
     used += durationSec;
     return { ...scene, durationSec };
   });
@@ -397,20 +399,30 @@ function captionEventsForCue(text, cueStart, cueEnd) {
   const start = Math.max(0, cueStart);
   const end = Math.max(start + 0.25, cueEnd);
   const duration = end - start;
-  const chunkDuration = duration / chunks.length;
+  const chunkWeights = chunks.map((lines) => speechWeightForWords(wordsFromLines(lines)));
+  const totalChunkWeight = chunkWeights.reduce((sum, weight) => sum + weight, 0) || chunks.length;
   const events = [];
+  let chunkCursor = start;
 
   for (let chunkIndex = 0; chunkIndex < chunks.length; chunkIndex += 1) {
     const lines = chunks[chunkIndex];
-    const chunkStart = start + (chunkDuration * chunkIndex);
-    const chunkEnd = chunkIndex === chunks.length - 1 ? end : start + (chunkDuration * (chunkIndex + 1));
-    const words = lines.join(" ").split(/\s+/).filter(Boolean);
+    const chunkStart = chunkCursor;
+    const chunkDuration = chunkIndex === chunks.length - 1
+      ? end - chunkStart
+      : (duration * (chunkWeights[chunkIndex] || 1)) / totalChunkWeight;
+    const chunkEnd = chunkIndex === chunks.length - 1 ? end : Math.min(end, chunkStart + chunkDuration);
+    const words = wordsFromLines(lines);
     if (!words.length || chunkEnd <= chunkStart) continue;
 
-    const wordSlot = (chunkEnd - chunkStart) / words.length;
+    const wordWeights = words.map(wordSpeechWeight);
+    const totalWordWeight = wordWeights.reduce((sum, weight) => sum + weight, 0) || words.length;
+    let wordCursor = chunkStart;
     for (let wordIndex = 0; wordIndex < words.length; wordIndex += 1) {
-      const wordStart = chunkStart + (wordSlot * wordIndex);
-      const wordEnd = wordIndex === words.length - 1 ? chunkEnd : Math.min(chunkEnd, wordStart + wordSlot);
+      const wordStart = wordCursor;
+      const wordDuration = wordIndex === words.length - 1
+        ? chunkEnd - wordStart
+        : ((chunkEnd - chunkStart) * wordWeights[wordIndex]) / totalWordWeight;
+      const wordEnd = wordIndex === words.length - 1 ? chunkEnd : Math.min(chunkEnd, wordStart + wordDuration);
       if (wordEnd <= wordStart + 0.05) continue;
       events.push({
         layer: 1,
@@ -419,7 +431,9 @@ function captionEventsForCue(text, cueStart, cueEnd) {
         style: "Caption",
         text: formatHighlightedAssCaption(lines, wordIndex)
       });
+      wordCursor = wordEnd;
     }
+    chunkCursor = chunkEnd;
   }
 
   return events;
@@ -468,6 +482,42 @@ function textWidthUnits(text) {
     else total += 0.58;
   }
   return total;
+}
+
+function sceneSpeechWeight(text) {
+  const words = splitCaptionWords(text);
+  return Math.max(1, speechWeightForWords(words) + punctuationPauseWeight(text));
+}
+
+function speechWeightForWords(words) {
+  return words.reduce((sum, word) => sum + wordSpeechWeight(word), 0);
+}
+
+function wordSpeechWeight(word) {
+  const clean = String(word || "").replace(/[^\p{L}\p{N}]/gu, "");
+  const length = clean.length || 1;
+  let weight = 0.24 + Math.min(1.18, length * 0.067);
+  if (length <= 2) weight *= 0.74;
+  if (/[,.]/.test(word)) weight += 0.1;
+  if (/[;:]/.test(word)) weight += 0.16;
+  if (/[!?]/.test(word)) weight += 0.24;
+  if (/[.?!]$/.test(word)) weight += 0.18;
+  return weight;
+}
+
+function punctuationPauseWeight(text) {
+  const value = String(text || "");
+  const sentencePauses = (value.match(/[.!?]/g) || []).length * 0.22;
+  const softPauses = (value.match(/[,;:]/g) || []).length * 0.08;
+  return sentencePauses + softPauses;
+}
+
+function splitCaptionWords(text) {
+  return String(text || "").replace(/\s+/g, " ").trim().split(/\s+/).filter(Boolean);
+}
+
+function wordsFromLines(lines) {
+  return splitCaptionWords((lines || []).join(" "));
 }
 
 function formatHighlightedAssCaption(lines, activeWordIndex) {
@@ -558,23 +608,27 @@ async function makeFallbackAudio({ outputPath, duration, text }) {
   const fadeOutAt = Math.max(0.5, duration - 0.7).toFixed(2);
   const filter = hasNarration
     ? [
-        "[0:a]volume=2.45,aecho=0.65:0.35:70:0.2,highpass=f=85,lowpass=f=5400,dynaudnorm=f=120:g=13[n]",
-        "[1:a]volume=0.34,lowpass=f=95,aecho=0.6:0.25:900:0.18[a0]",
-        "[2:a]volume=0.19,lowpass=f=230,tremolo=f=0.22:d=0.85[a1]",
-        "[3:a]volume=0.11,lowpass=f=460,tremolo=f=0.35:d=0.8,aecho=0.45:0.25:760:0.18[a2]",
-        "[4:a]volume=0.25,highpass=f=70,lowpass=f=1450[a3]",
-        "[5:a]volume=0.09,highpass=f=900,lowpass=f=3900,tremolo=f=8:d=0.72[a4]",
-        "[6:a]volume=0.15,highpass=f=160,lowpass=f=780,tremolo=f=0.42:d=0.88,aecho=0.55:0.28:1180:0.22[a5]",
-        `[n][a0][a1][a2][a3][a4][a5]amix=inputs=7:duration=longest:normalize=0,lowpass=f=6500,volume=1.1,alimiter=limit=0.95,afade=t=in:st=0:d=0.25,afade=t=out:st=${fadeOutAt}:d=0.65[a]`
+        "[0:a]volume=2.35,aecho=0.65:0.35:70:0.2,highpass=f=85,lowpass=f=5400,dynaudnorm=f=120:g=13[n]",
+        "[1:a]volume=0.42,lowpass=f=95,aecho=0.6:0.25:900:0.18[a0]",
+        "[2:a]volume=0.25,lowpass=f=230,tremolo=f=0.22:d=0.85[a1]",
+        "[3:a]volume=0.15,lowpass=f=460,tremolo=f=0.35:d=0.8,aecho=0.45:0.25:760:0.18[a2]",
+        "[4:a]volume=0.34,highpass=f=70,lowpass=f=1450[a3]",
+        "[5:a]volume=0.12,highpass=f=900,lowpass=f=3900,tremolo=f=8:d=0.72[a4]",
+        "[6:a]volume=0.19,highpass=f=160,lowpass=f=780,tremolo=f=0.42:d=0.88,aecho=0.55:0.28:1180:0.22[a5]",
+        "[7:a]volume=0.18,highpass=f=105,lowpass=f=620,tremolo=f=0.12:d=0.92,aecho=0.62:0.32:1420:0.28[m0]",
+        "[8:a]volume=0.075,highpass=f=240,lowpass=f=1300,tremolo=f=5.2:d=0.42,aecho=0.38:0.22:520:0.16[m1]",
+        `[n][a0][a1][a2][a3][a4][a5][m0][m1]amix=inputs=9:duration=longest:normalize=0,lowpass=f=6900,volume=1.08,alimiter=limit=0.95,afade=t=in:st=0:d=0.25,afade=t=out:st=${fadeOutAt}:d=0.65[a]`
       ].join(";")
     : [
-        "[0:a]volume=0.38,lowpass=f=95,aecho=0.6:0.25:900:0.18[a0]",
-        "[1:a]volume=0.22,lowpass=f=230,tremolo=f=0.22:d=0.85[a1]",
-        "[2:a]volume=0.13,lowpass=f=460,tremolo=f=0.35:d=0.8,aecho=0.45:0.25:760:0.18[a2]",
-        "[3:a]volume=0.28,highpass=f=70,lowpass=f=1450[a3]",
-        "[4:a]volume=0.1,highpass=f=900,lowpass=f=3900,tremolo=f=8:d=0.72[a4]",
-        "[5:a]volume=0.18,highpass=f=160,lowpass=f=780,tremolo=f=0.42:d=0.88,aecho=0.55:0.28:1180:0.22[a5]",
-        `[a0][a1][a2][a3][a4][a5]amix=inputs=6:duration=longest:normalize=0,lowpass=f=5200,volume=1.42,alimiter=limit=0.95,afade=t=in:st=0:d=0.45,afade=t=out:st=${fadeOutAt}:d=0.65[a]`
+        "[0:a]volume=0.46,lowpass=f=95,aecho=0.6:0.25:900:0.18[a0]",
+        "[1:a]volume=0.29,lowpass=f=230,tremolo=f=0.22:d=0.85[a1]",
+        "[2:a]volume=0.18,lowpass=f=460,tremolo=f=0.35:d=0.8,aecho=0.45:0.25:760:0.18[a2]",
+        "[3:a]volume=0.38,highpass=f=70,lowpass=f=1450[a3]",
+        "[4:a]volume=0.13,highpass=f=900,lowpass=f=3900,tremolo=f=8:d=0.72[a4]",
+        "[5:a]volume=0.23,highpass=f=160,lowpass=f=780,tremolo=f=0.42:d=0.88,aecho=0.55:0.28:1180:0.22[a5]",
+        "[6:a]volume=0.2,highpass=f=105,lowpass=f=620,tremolo=f=0.12:d=0.92,aecho=0.62:0.32:1420:0.28[m0]",
+        "[7:a]volume=0.085,highpass=f=240,lowpass=f=1300,tremolo=f=5.2:d=0.42,aecho=0.38:0.22:520:0.16[m1]",
+        `[a0][a1][a2][a3][a4][a5][m0][m1]amix=inputs=8:duration=longest:normalize=0,lowpass=f=5600,volume=1.36,alimiter=limit=0.95,afade=t=in:st=0:d=0.45,afade=t=out:st=${fadeOutAt}:d=0.65[a]`
       ].join(";");
 
   const args = ["-y"];
@@ -616,6 +670,18 @@ async function makeFallbackAudio({ outputPath, duration, text }) {
     String(duration),
     "-i",
     "sine=frequency=293:sample_rate=44100",
+    "-f",
+    "lavfi",
+    "-t",
+    String(duration),
+    "-i",
+    "sine=frequency=147:sample_rate=44100",
+    "-f",
+    "lavfi",
+    "-t",
+    String(duration),
+    "-i",
+    "sine=frequency=311:sample_rate=44100",
     "-filter_complex",
     filter,
     "-map",
@@ -642,14 +708,16 @@ async function makeFallbackAudio({ outputPath, duration, text }) {
 async function makeTtsHorrorMix({ inputPath, outputPath, duration }) {
   const fadeOutAt = Math.max(0.5, duration - 0.7).toFixed(2);
   const filter = [
-    "[0:a]volume=2.6,aecho=0.58:0.28:82:0.18,highpass=f=85,lowpass=f=5600,dynaudnorm=f=120:g=13[n]",
-    "[1:a]volume=0.32,lowpass=f=95,aecho=0.6:0.28:960:0.2[a0]",
-    "[2:a]volume=0.18,lowpass=f=230,tremolo=f=0.2:d=0.9[a1]",
-    "[3:a]volume=0.105,lowpass=f=460,tremolo=f=0.34:d=0.82,aecho=0.45:0.25:760:0.2[a2]",
-    "[4:a]volume=0.24,highpass=f=72,lowpass=f=1450[a3]",
-    "[5:a]volume=0.085,highpass=f=900,lowpass=f=3900,tremolo=f=8.5:d=0.76[a4]",
-    "[6:a]volume=0.14,highpass=f=160,lowpass=f=780,tremolo=f=0.42:d=0.88,aecho=0.55:0.28:1180:0.22[a5]",
-    `[n][a0][a1][a2][a3][a4][a5]amix=inputs=7:duration=longest:normalize=0,lowpass=f=6800,volume=1.08,alimiter=limit=0.95,afade=t=in:st=0:d=0.2,afade=t=out:st=${fadeOutAt}:d=0.65[a]`
+    "[0:a]volume=2.35,aecho=0.58:0.28:82:0.18,highpass=f=85,lowpass=f=5600,dynaudnorm=f=120:g=13[n]",
+    "[1:a]volume=0.4,lowpass=f=95,aecho=0.6:0.28:960:0.2[a0]",
+    "[2:a]volume=0.25,lowpass=f=230,tremolo=f=0.2:d=0.9[a1]",
+    "[3:a]volume=0.15,lowpass=f=460,tremolo=f=0.34:d=0.82,aecho=0.45:0.25:760:0.2[a2]",
+    "[4:a]volume=0.34,highpass=f=72,lowpass=f=1450[a3]",
+    "[5:a]volume=0.12,highpass=f=900,lowpass=f=3900,tremolo=f=8.5:d=0.76[a4]",
+    "[6:a]volume=0.19,highpass=f=160,lowpass=f=780,tremolo=f=0.42:d=0.88,aecho=0.55:0.28:1180:0.22[a5]",
+    "[7:a]volume=0.18,highpass=f=105,lowpass=f=620,tremolo=f=0.12:d=0.92,aecho=0.62:0.32:1420:0.28[m0]",
+    "[8:a]volume=0.075,highpass=f=240,lowpass=f=1300,tremolo=f=5.2:d=0.42,aecho=0.38:0.22:520:0.16[m1]",
+    `[n][a0][a1][a2][a3][a4][a5][m0][m1]amix=inputs=9:duration=longest:normalize=0,lowpass=f=7200,volume=1.08,alimiter=limit=0.95,afade=t=in:st=0:d=0.2,afade=t=out:st=${fadeOutAt}:d=0.65[a]`
   ].join(";");
 
   await runFfmpeg([
@@ -692,6 +760,18 @@ async function makeTtsHorrorMix({ inputPath, outputPath, duration }) {
     String(duration),
     "-i",
     "sine=frequency=293:sample_rate=44100",
+    "-f",
+    "lavfi",
+    "-t",
+    String(duration),
+    "-i",
+    "sine=frequency=147:sample_rate=44100",
+    "-f",
+    "lavfi",
+    "-t",
+    String(duration),
+    "-i",
+    "sine=frequency=311:sample_rate=44100",
     "-filter_complex",
     filter,
     "-map",
