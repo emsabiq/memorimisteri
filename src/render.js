@@ -175,10 +175,10 @@ async function writeSegmentTextFiles({ story, scene, workDir }) {
   };
   await fs.writeFile(files.part, formatLines(partText, 34, 1) || "PART 1");
   await fs.writeFile(files.title, formatLines(titleText, scene.index === 1 ? 20 : 24, 2) || story.title);
-  const chunks = splitSubtitleChunks(subtitleText);
-  for (let index = 0; index < chunks.length; index += 1) {
+  const words = splitSubtitleWords(subtitleText);
+  for (let index = 0; index < words.length; index += 1) {
     const subtitlePath = path.join(workDir, `scene-${scene.index}-subtitle-${index + 1}.txt`);
-    await fs.writeFile(subtitlePath, formatLines(chunks[index], 36, 3) || "");
+    await fs.writeFile(subtitlePath, formatLines(words[index], 18, 1) || "");
     files.subtitles.push(subtitlePath);
   }
   return files;
@@ -188,13 +188,9 @@ function formatLines(value, maxChars, maxLines) {
   return splitLines(value, maxChars).slice(0, maxLines).join("\n");
 }
 
-function splitSubtitleChunks(value) {
+function splitSubtitleWords(value) {
   const words = String(value || "").trim().split(/\s+/).filter(Boolean);
-  if (!words.length) return [""];
-  const chunkCount = words.length > 30 ? 3 : words.length > 15 ? 2 : 1;
-  const chunkSize = Math.ceil(words.length / chunkCount);
-  return Array.from({ length: chunkCount }, (_, index) => words.slice(index * chunkSize, (index + 1) * chunkSize).join(" "))
-    .filter(Boolean);
+  return words.length ? words : [""];
 }
 
 function ffmpegPath(filePath) {
@@ -257,9 +253,9 @@ function subtitleOverlays({ regularFont, subtitleFiles, duration }) {
   const step = duration / Math.max(1, files.length);
   return files.map((file, index) => {
     const start = Math.max(0, index * step);
-    const end = Math.max(start + 0.5, Math.min(duration, (index + 1) * step + 0.08));
+    const end = Math.max(start + 0.22, Math.min(duration, (index + 1) * step + 0.05));
     const enable = `between(t\\,${start.toFixed(2)}\\,${end.toFixed(2)})`;
-    return `drawtext=fontfile='${regularFont}':textfile='${ffmpegPath(file)}':x=78:y=h-340:fontsize=50:fontcolor=0xf7f1e5:line_spacing=14:box=1:boxcolor=black@0.7:boxborderw=30:borderw=2:bordercolor=black@0.9:enable='${enable}'`;
+    return `drawtext=fontfile='${regularFont}':textfile='${ffmpegPath(file)}':x=(w-text_w)/2:y=h-330:fontsize=76:fontcolor=0xfff4cf:line_spacing=10:box=1:boxcolor=black@0.72:boxborderw=34:borderw=3:bordercolor=black@0.95:enable='${enable}'`;
   });
 }
 
@@ -302,19 +298,21 @@ async function makeFallbackAudio({ outputPath, duration, text }) {
   const fadeOutAt = Math.max(0.5, duration - 0.7).toFixed(2);
   const filter = hasNarration
     ? [
-        "[0:a]volume=1.7,aecho=0.65:0.35:55:0.18[n]",
-        "[1:a]volume=0.12,lowpass=f=95[a0]",
-        "[2:a]volume=0.04,aecho=0.4:0.2:700:0.16[a1]",
-        "[3:a]volume=0.1,highpass=f=90,lowpass=f=1400[a2]",
-        "[4:a]volume=0.035,highpass=f=1100,lowpass=f=3600,tremolo=f=7:d=0.7[a3]",
-        `[n][a0][a1][a2][a3]amix=inputs=5:duration=longest,lowpass=f=4600,dynaudnorm=f=150:g=10,volume=1.9,alimiter=limit=0.95,afade=t=in:st=0:d=0.25,afade=t=out:st=${fadeOutAt}:d=0.65[a]`
+        "[0:a]volume=2.25,aecho=0.65:0.35:70:0.2,highpass=f=85,lowpass=f=5400,dynaudnorm=f=120:g=12[n]",
+        "[1:a]volume=0.24,lowpass=f=80,aecho=0.6:0.25:900:0.18[a0]",
+        "[2:a]volume=0.12,lowpass=f=180,tremolo=f=0.22:d=0.85[a1]",
+        "[3:a]volume=0.065,aecho=0.45:0.25:760:0.18[a2]",
+        "[4:a]volume=0.16,highpass=f=70,lowpass=f=1350[a3]",
+        "[5:a]volume=0.055,highpass=f=1200,lowpass=f=3800,tremolo=f=8:d=0.72[a4]",
+        `[n][a0][a1][a2][a3][a4]amix=inputs=6:duration=longest:normalize=0,lowpass=f=6000,volume=1.08,alimiter=limit=0.95,afade=t=in:st=0:d=0.25,afade=t=out:st=${fadeOutAt}:d=0.65[a]`
       ].join(";")
     : [
-        "[0:a]volume=0.14,lowpass=f=95[a0]",
-        "[1:a]volume=0.05,aecho=0.4:0.2:700:0.16[a1]",
-        "[2:a]volume=0.12,highpass=f=90,lowpass=f=1400[a2]",
-        "[3:a]volume=0.045,highpass=f=1100,lowpass=f=3600,tremolo=f=7:d=0.7[a3]",
-        `[a0][a1][a2][a3]amix=inputs=4:duration=longest,lowpass=f=2800,dynaudnorm=f=150:g=12,volume=2.2,alimiter=limit=0.95,afade=t=in:st=0:d=0.45,afade=t=out:st=${fadeOutAt}:d=0.65[a]`
+        "[0:a]volume=0.28,lowpass=f=80,aecho=0.6:0.25:900:0.18[a0]",
+        "[1:a]volume=0.14,lowpass=f=180,tremolo=f=0.22:d=0.85[a1]",
+        "[2:a]volume=0.07,aecho=0.45:0.25:760:0.18[a2]",
+        "[3:a]volume=0.18,highpass=f=70,lowpass=f=1350[a3]",
+        "[4:a]volume=0.065,highpass=f=1200,lowpass=f=3800,tremolo=f=8:d=0.72[a4]",
+        `[a0][a1][a2][a3][a4]amix=inputs=5:duration=longest:normalize=0,lowpass=f=3600,volume=1.35,alimiter=limit=0.95,afade=t=in:st=0:d=0.45,afade=t=out:st=${fadeOutAt}:d=0.65[a]`
       ].join(";");
 
   const args = ["-y"];
@@ -332,6 +330,12 @@ async function makeFallbackAudio({ outputPath, duration, text }) {
     String(duration),
     "-i",
     "sine=frequency=91:sample_rate=44100",
+    "-f",
+    "lavfi",
+    "-t",
+    String(duration),
+    "-i",
+    "sine=frequency=184:sample_rate=44100",
     "-f",
     "lavfi",
     "-t",
@@ -370,12 +374,13 @@ async function makeFallbackAudio({ outputPath, duration, text }) {
 async function makeTtsHorrorMix({ inputPath, outputPath, duration }) {
   const fadeOutAt = Math.max(0.5, duration - 0.7).toFixed(2);
   const filter = [
-    "[0:a]volume=1.55,aecho=0.5:0.22:72:0.13,highpass=f=80,lowpass=f=5200,dynaudnorm=f=140:g=7[n]",
-    "[1:a]volume=0.1,lowpass=f=95[a0]",
-    "[2:a]volume=0.035,aecho=0.4:0.2:720:0.14[a1]",
-    "[3:a]volume=0.095,highpass=f=90,lowpass=f=1500[a2]",
-    "[4:a]volume=0.032,highpass=f=1100,lowpass=f=3600,tremolo=f=7:d=0.72[a3]",
-    `[n][a0][a1][a2][a3]amix=inputs=5:duration=longest,lowpass=f=6200,alimiter=limit=0.94,afade=t=in:st=0:d=0.2,afade=t=out:st=${fadeOutAt}:d=0.65[a]`
+    "[0:a]volume=2.25,aecho=0.58:0.28:82:0.18,highpass=f=85,lowpass=f=5600,dynaudnorm=f=120:g=12[n]",
+    "[1:a]volume=0.22,lowpass=f=82,aecho=0.6:0.28:960:0.2[a0]",
+    "[2:a]volume=0.105,lowpass=f=180,tremolo=f=0.2:d=0.9[a1]",
+    "[3:a]volume=0.058,aecho=0.45:0.25:760:0.2[a2]",
+    "[4:a]volume=0.14,highpass=f=72,lowpass=f=1450[a3]",
+    "[5:a]volume=0.048,highpass=f=1200,lowpass=f=3900,tremolo=f=8.5:d=0.76[a4]",
+    `[n][a0][a1][a2][a3][a4]amix=inputs=6:duration=longest:normalize=0,lowpass=f=6500,volume=1.04,alimiter=limit=0.95,afade=t=in:st=0:d=0.2,afade=t=out:st=${fadeOutAt}:d=0.65[a]`
   ].join(";");
 
   await runFfmpeg([
@@ -394,6 +399,12 @@ async function makeTtsHorrorMix({ inputPath, outputPath, duration }) {
     String(duration),
     "-i",
     "sine=frequency=96:sample_rate=44100",
+    "-f",
+    "lavfi",
+    "-t",
+    String(duration),
+    "-i",
+    "sine=frequency=184:sample_rate=44100",
     "-f",
     "lavfi",
     "-t",

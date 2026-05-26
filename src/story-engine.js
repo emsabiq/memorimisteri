@@ -17,20 +17,18 @@ const visualPromptSuffix = [
   "vertical 9:16 cinematic Indonesian horror illustration",
   "moody blue-green night lighting, soft mist, visible main subject, readable silhouette",
   "high detail, phone-screen composition, dark but not underexposed",
-  "no text, no logo, no celebrity, no gore, no distorted hands"
+  "no text, no logo, no celebrity, no gore, no distorted hands, no extra human figures"
 ].join(", ");
 
 const defaultCharacter = "Andi, pria Indonesia 28 tahun, rambut hitam pendek sedikit berantakan, wajah lelah dan penasaran, jaket denim gelap di atas kaos hitam polos, celana cargo hitam, sneakers gelap usang, selalu membawa smartphone dan senter kecil";
 
 const shotDirections = [
   "wide atmospheric establishing shot, no visible person, focus on the location, mist, light, and negative space",
-  "protagonist continuity shot, show the main character clearly with the same outfit and props",
   "object detail shot, no full person, focus on the clue, phone screen, door, window, well surface, key, or moving object",
-  "POV flashlight shot from the protagonist, only hand, phone, or small flashlight may appear",
+  "POV flashlight shot, only a hand, phone, or small flashlight may appear",
   "distant silhouette or shadow shot, person optional and small in frame, atmosphere is the main subject",
-  "protagonist reaction shot, show the main character only if it serves the narration",
   "environment threat shot, no visible face, focus on movement in the room, corridor, field, or reflection",
-  "final unsettling atmosphere shot, protagonist optional as a tiny silhouette, do not make it a portrait"
+  "final unsettling atmosphere shot, do not make it a portrait"
 ];
 
 const fallbackTemplates = [
@@ -262,10 +260,10 @@ function buildPrompt(input, memory) {
     "Durasi video current part harus sekitar 1 menit dan tidak boleh lewat 60 detik.",
     "Jangan tulis kalimat seperti: bersambung, akan berlanjut, lanjut di part berikutnya, tunggu part berikutnya, atau summary penutup. Akhiri part dengan beat cerita natural.",
     "Setiap scene wajib punya momen visual berbeda, supaya gambar tidak kembar.",
-    `Tokoh utama menjadi anchor kontinuitas cerita: ${input.protagonistProfile}.`,
-    "Jangan tampilkan tokoh utama di semua gambar. Campurkan character shot dengan establishing shot, object detail, POV senter/HP, bayangan, lorong, sawah, pintu, sumur, atau benda petunjuk.",
-    "Untuk video 8 scene, scene 2, 4, dan 6 wajib menjadi insert shot tanpa orang/tokoh: fokus lokasi, objek, cahaya, refleksi, pintu, sumur, HP, atau petunjuk visual.",
-    "Idealnya 40-60% scene menampilkan tokoh utama, sisanya visual suasana atau objek. Kalau tokoh utama muncul, imagePrompt wajib menyebut nama, umur, outfit, smartphone, dan senter kecil yang sama.",
+    `Tokoh utama hanya untuk kontinuitas saat skrip benar-benar butuh orang: ${input.protagonistProfile}.`,
+    "Visual harus mengikuti skrip, bukan memaksa tokoh muncul. Kalau adegan berupa suara, benda, lorong, sumur, pintu, HP, sawah, refleksi, atau bayangan, imagePrompt harus berupa POV/objek/suasana tanpa wajah dan tanpa badan penuh.",
+    "Jangan menambahkan sosok manusia, hantu berbentuk manusia, atau figur orang tambahan kecuali skrip eksplisit menyebut ada sosok terlihat. Kalau ada orang terlihat, gunakan hanya karakter yang disebut dalam skrip.",
+    "Untuk video 8 scene, maksimal 2 scene boleh menampilkan tokoh utama secara jelas. Sisanya harus insert shot/POV/establishing shot. Kalau tokoh utama muncul, imagePrompt wajib menyebut nama, umur, outfit, smartphone, dan senter kecil yang sama.",
     "Untuk adegan sumur: tampilkan sosok di samping/dekat sumur atau refleksi aman di air; jangan tampilkan orang jatuh, tubuh terjebak, tenggelam, atau berada di dalam sumur.",
     `Ide: ${input.idea}`,
     `Judul episode opsional: ${input.episodeTitle || "buatkan judul episode yang kuat"}`,
@@ -297,46 +295,50 @@ function normalizePlan(plan, input, memory) {
   const title = makeUniqueTitle(cleanText(plan?.title || fallback.title, 80), memory, input);
   const durations = distributeDurations(input.durationSec, Math.min(input.sceneCount, scenes.length));
   const episode = normalizeEpisode(plan?.episode, fallback.episode, title, input);
+  const selectedScenes = scenes.slice(0, input.sceneCount);
+  const characterSceneIndexes = selectCharacterSceneIndexes(selectedScenes, input);
   return {
     title,
     logline: stripContinuationLanguage(cleanText(plan?.logline || fallback.logline, 240)),
     hook: stripContinuationLanguage(cleanText(plan?.hook || fallback.hook, 240)),
     ending: stripContinuationLanguage(cleanText(plan?.ending || fallback.ending, 240)),
     episode,
-    scenes: scenes.slice(0, input.sceneCount).map((scene, index) => normalizeScene({
+    scenes: selectedScenes.map((scene, index) => normalizeScene({
       ...scene,
       durationSec: durations[index] || scene.durationSec
-    }, index, input))
+    }, index, input, {
+      characterShotAllowed: characterSceneIndexes.has(index)
+    }))
   };
 }
 
-function normalizeScene(scene, index, input) {
+function normalizeScene(scene, index, input, options = {}) {
   const durationSec = clamp(Number(scene.durationSec || Math.round(input.durationSec / input.sceneCount)), 3, 15);
-  const screenText = stripContinuationLanguage(cleanText(scene.screenText || `Scene ${index + 1}`, 64));
+  const screenText = normalizeScreenText(scene.screenText, scene, input, index);
   return {
     index: index + 1,
     durationSec,
     narration: stripContinuationLanguage(cleanText(scene.narration || fallbackNarration(scene, input, index), 700)),
     screenText,
-    imagePrompt: enhancePrompt(scene.imagePrompt || "", input, index),
+    imagePrompt: enhancePrompt(scene.imagePrompt || "", input, index, options),
     transition: cleanText(scene.transition || transitions[index % transitions.length], 80),
     effect: cleanText(scene.effect || "slow zoom, subtle film grain, dark vignette", 120),
     soundDesign: cleanText(scene.soundDesign || "low drone, faint room tone", 120)
   };
 }
 
-function enhancePrompt(prompt, input, index) {
+function enhancePrompt(prompt, input, index, options = {}) {
   const motif = themeMotif(input.theme, index);
   const requestedBase = prompt || `${motif}, tense quiet horror scene`;
-  const forceAtmospheric = shouldForceAtmosphericInsert(index) || avoidsVisibleCharacter(requestedBase);
+  const forceAtmospheric = !options.characterShotAllowed || avoidsVisibleCharacter(requestedBase);
   const base = forceAtmospheric
-    ? `${motif}, atmospheric insert shot inspired by the scene mood, focus on location, object clue, light, shadow, reflection, phone glow, door, window, or well surface`
+    ? `${visualFocusFromScene(requestedBase, input, index)}, atmospheric insert shot that follows the script mood, focus on location, object clue, light, shadow, reflection, phone glow, door, window, well surface, or moving object`
     : requestedBase;
   const direction = forceAtmospheric
     ? "atmospheric or object-focused insert shot, no visible person, no face, no full body"
     : chooseShotDirection(base, input, index);
   const characterRule = forceAtmospheric
-    ? "no visible protagonist; imply the character only through flashlight beam, phone glow, footprints, open door, shadow, or object clue"
+    ? "no visible protagonist, no extra human figure, no human-shaped ghost; imply the scene only through flashlight beam, phone glow, footprints, open door, abstract shadow, reflection, or object clue"
     : `character continuity: if ${input.protagonistName} appears, use this exact profile: ${input.protagonistProfile}; otherwise keep the frame atmospheric or object-focused and do not force a person into the frame`;
   return [
     base,
@@ -345,6 +347,26 @@ function enhancePrompt(prompt, input, index) {
     "if a well appears, keep any human silhouette beside the well or reflected safely on water, never inside the well",
     visualPromptSuffix
   ].join(", ");
+}
+
+function selectCharacterSceneIndexes(scenes, input) {
+  const name = cleanText(input.protagonistName || "Andi", 40).toLowerCase();
+  const candidates = scenes
+    .map((scene, index) => ({ scene, index, score: characterNeedScore(scene, name) }))
+    .filter((item) => item.score > 0)
+    .sort((a, b) => b.score - a.score || a.index - b.index);
+  return new Set(candidates.slice(0, 2).map((item) => item.index));
+}
+
+function characterNeedScore(scene, name) {
+  const text = `${scene.narration || ""} ${scene.screenText || ""} ${scene.imagePrompt || ""}`.toLowerCase();
+  if (avoidsVisibleCharacter(text)) return 0;
+  let score = 0;
+  if (name && text.includes(name)) score += 3;
+  if (/\b(wajah|ekspresi|berdiri|menatap|berjalan|mendekat|mundur|berlari|memegang|menggenggam|mengangkat|menyentuh)\b/i.test(text)) score += 2;
+  if (/\b(pria|tokoh utama|protagonist|karakter)\b/i.test(text)) score += 1;
+  if (/\b(pov|layar hp|smartphone|senter|cahaya|bayangan|refleksi|pintu|jendela|sumur|kursi|lantai|jejak|objek)\b/i.test(text)) score -= 1;
+  return Math.max(0, score);
 }
 
 function chooseShotDirection(base, input, index) {
@@ -359,12 +381,39 @@ function chooseShotDirection(base, input, index) {
   return shotDirections[index % shotDirections.length];
 }
 
-function shouldForceAtmosphericInsert(index) {
-  return [2, 4, 6].includes(index + 1);
-}
-
 function avoidsVisibleCharacter(value) {
   return /\b(tanpa tokoh|tanpa orang|tanpa manusia|no visible person|no person|no human|without person|without people)\b/i.test(String(value || ""));
+}
+
+function normalizeScreenText(value, scene, input, index) {
+  const text = stripContinuationLanguage(cleanText(value || "", 64));
+  if (text && !/^scene\s+\d+$/i.test(text)) return text;
+  return titleFromFocus(visualFocusFromScene(`${scene.imagePrompt || ""} ${scene.narration || ""}`, input, index));
+}
+
+function visualFocusFromScene(value, input, index) {
+  const text = cleanText(value || "", 900).toLowerCase();
+  const motifs = [
+    ["sumur", "sumur tua dan permukaan air gelap"],
+    ["jendela", "jendela retak dan pantulan samar"],
+    ["kaca", "kaca retak dengan cahaya senter"],
+    ["kursi", "kursi kosong yang bergeser sendiri"],
+    ["pintu", "pintu tua setengah terbuka"],
+    ["hp", "layar HP menyala dalam gelap"],
+    ["smartphone", "layar smartphone menyala dalam gelap"],
+    ["senter", "cahaya senter menyapu lantai tua"],
+    ["sawah", "sawah gelap berkabut di luar rumah"],
+    ["lorong", "lorong rumah tua yang gelap"],
+    ["bayangan", "bayangan samar di dinding retak"],
+    ["refleksi", "refleksi samar di permukaan air"]
+  ];
+  const found = motifs.find(([keyword]) => text.includes(keyword));
+  return found?.[1] || themeMotif(input.theme, index);
+}
+
+function titleFromFocus(value) {
+  const text = cleanText(value || "Bayangan di ruang gelap", 64);
+  return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
 function fallbackNarration(scene, input, index) {

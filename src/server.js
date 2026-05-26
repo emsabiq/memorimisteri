@@ -203,20 +203,14 @@ function safePromptForScene(story, scene) {
     "POV flashlight shot, only a hand, phone, or small flashlight may appear, no face required",
     "distant silhouette optional and small in frame, atmosphere and location remain the main subject"
   ];
-  const characterShots = [
-    `safe medium shot of Andi near the location, ${character}`,
-    `distant safe silhouette of Andi with the same outfit and small flashlight, ${character}`
-  ];
-  const forceAtmospheric = [2, 4, 6].includes(sceneIndex);
-  const shot = !forceAtmospheric && sceneIndex % 3 === 2
-    ? characterShots[sceneIndex % characterShots.length]
-    : atmosphericShots[Number(scene.index || 0) % atmosphericShots.length];
+  const shot = atmosphericShots[sceneIndex % atmosphericShots.length];
   return [
     shot,
+    `if the script absolutely requires Andi, show only a small safe distant silhouette with this continuity: ${character}`,
     `scene mood: ${scene.screenText || story.title}`,
     "old empty house near rice field, closed old well nearby only as background object, no person inside the well",
     "moody blue-green night lighting, soft mist, visible main subject, readable silhouette, cinematic phone-screen composition",
-    "vertical 9:16, high detail, dark but not underexposed, no text, no logo, no celebrity, no gore, no injury, no trapped person, no drowning, no fall, no violence, no self-harm"
+    "vertical 9:16, high detail, dark but not underexposed, no text, no logo, no celebrity, no gore, no extra human figures, no human-shaped ghost, no injury, no trapped person, no drowning, no fall, no violence, no self-harm"
   ].join(", ");
 }
 
