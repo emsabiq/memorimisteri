@@ -50,6 +50,9 @@ export async function renderDraftVideo(story) {
 
   const sourceAudioDuration = story.assets?.audio?.path ? await probeMediaDuration(story.assets.audio.path) : 0;
   const contentDuration = renderContentDuration(story, sourceAudioDuration);
+  const narrationTempo = sourceAudioDuration > contentDuration && contentDuration > 0
+    ? clamp(sourceAudioDuration / contentDuration, 1, 1.35)
+    : 1;
   const captionScenes = buildRenderScenes(story, contentDuration);
   const scenes = [buildIntroCoverScene(story, captionScenes[0]), ...captionScenes, ...buildEndingScenes(story, captionScenes.at(-1))];
   const transitionDurations = scenes.map((scene, index) => {
@@ -104,6 +107,7 @@ export async function renderDraftVideo(story) {
       workDir,
       duration: totalDuration,
       narrationDelay: introFreezeDuration,
+      narrationTempo,
       jumpScareAt,
       seedText: story.id || story.title
     });
@@ -154,8 +158,9 @@ function buildRenderScenes(story, targetDuration) {
 
 function renderContentDuration(story, sourceAudioDuration) {
   const requestedDuration = clamp(Number(story.input?.durationSec || 60), 45, 60);
-  if (sourceAudioDuration > 0) return Number(sourceAudioDuration.toFixed(2));
-  return Math.max(8, requestedDuration - introFreezeDuration - endCardDuration);
+  const targetContentDuration = Math.max(8, requestedDuration - introFreezeDuration - jumpScareDuration - endCardDuration);
+  if (sourceAudioDuration > 0) return Number(Math.min(sourceAudioDuration, targetContentDuration).toFixed(2));
+  return targetContentDuration;
 }
 
 function buildIntroCoverScene(story, firstScene) {
@@ -1007,14 +1012,16 @@ async function makeFallbackAudio({ outputPath, workDir, duration, text, narratio
   };
 }
 
-async function makeTtsHorrorMix({ inputPath, outputPath, workDir, duration, narrationDelay = 0, jumpScareAt = 0, seedText }) {
+async function makeTtsHorrorMix({ inputPath, outputPath, workDir, duration, narrationDelay = 0, narrationTempo = 1, jumpScareAt = 0, seedText }) {
   const baseOutputPath = outputPath.replace(/\.m4a$/i, "-base.m4a");
   const musicPath = path.join(workDir || path.dirname(outputPath), "dramatic-horror-music.wav");
   await makeHorrorMusicBed({ outputPath: musicPath, duration, seedText });
   const delayMs = Math.max(0, Math.round(Number(narrationDelay || 0) * 1000));
+  const tempo = clamp(Number(narrationTempo || 1), 0.8, 1.35);
+  const tempoFilter = Math.abs(tempo - 1) > 0.01 ? `atempo=${tempo.toFixed(4)},` : "";
   const fadeOutAt = Math.max(0.5, duration - 0.7).toFixed(2);
   const filter = [
-    `[0:a]adelay=${delayMs}:all=1,volume=2.55,aecho=0.5:0.22:70:0.14,highpass=f=85,lowpass=f=5800,dynaudnorm=f=110:g=15[n]`,
+    `[0:a]${tempoFilter}adelay=${delayMs}:all=1,volume=2.55,aecho=0.5:0.22:70:0.14,highpass=f=85,lowpass=f=5800,dynaudnorm=f=110:g=15[n]`,
     "[1:a]volume=0.24,lowpass=f=95,aecho=0.6:0.28:960:0.2[a0]",
     "[2:a]volume=0.13,lowpass=f=230,tremolo=f=0.2:d=0.9[a1]",
     "[3:a]volume=0.08,lowpass=f=460,tremolo=f=0.34:d=0.82,aecho=0.45:0.25:760:0.2[a2]",

@@ -9,6 +9,7 @@ const narrationStyleRules = [
   "Gunakan kalimat pendek, tegang, dan visual. Sisipkan jeda natural lewat koma, titik, atau elipsis secukupnya.",
   "Boleh memakai gaya 'aku' kalau cocok dengan ide, atau third-person dekat kalau tokoh utama disebut; pilih satu dan konsisten.",
   "Hindari kata-kata kaku seperti 'terdapat', 'melakukan observasi', 'memasuki area', 'terlihat jelas'. Pakai bahasa sehari-hari yang tetap sinematik.",
+  "Jangan pernah membacakan biodata, umur, ciri fisik, atau outfit tokoh di narration. Cukup sebut aksi dan tempat, misalnya: 'Andi berdiri di depan sumur tua.'",
   "Bangun rasa takut dari suara kecil, benda berubah tempat, napas tertahan, layar HP, pintu, jendela, sumur, dan hal yang hampir terlihat.",
   "Setiap scene narration idealnya 1-2 kalimat saja, mudah dibaca TTS, dan langsung membawa penonton ke momen berikutnya."
 ];
@@ -274,7 +275,9 @@ function buildPrompt(input, memory) {
     "Jangan tulis kalimat seperti: bersambung, akan berlanjut, lanjut di part berikutnya, tunggu part berikutnya, atau summary penutup. Akhiri part dengan beat cerita natural.",
     "Setiap scene wajib punya momen visual berbeda, supaya gambar tidak kembar.",
     "ScreenText harus pendek, seperti judul beat visual, bukan kalimat panjang.",
-    `Tokoh utama hanya untuk kontinuitas saat skrip benar-benar butuh orang: ${input.protagonistProfile}.`,
+    `Detail tokoh utama hanya untuk kontinuitas visual di imagePrompt saat skrip benar-benar butuh orang: ${input.protagonistProfile}.`,
+    "Detail tokoh seperti umur, rambut, wajah, jaket, kaos, celana, sepatu, HP, dan senter tidak boleh muncul di narration, hook, logline, ending, screenText, atau part outline.",
+    `Kalau narration menyebut tokoh, pakai gaya natural seperti: '${input.protagonistName} berada di depan sumur tua' atau '${input.protagonistName} menahan napas di lorong gelap'.`,
     "Visual harus mengikuti skrip, bukan memaksa tokoh muncul. Kalau adegan berupa suara, benda, lorong, sumur, pintu, HP, sawah, refleksi, atau bayangan, imagePrompt harus berupa POV/objek/suasana tanpa wajah dan tanpa badan penuh.",
     "Jangan menambahkan sosok manusia, hantu berbentuk manusia, atau figur orang tambahan kecuali skrip eksplisit menyebut ada sosok terlihat. Kalau ada orang terlihat, gunakan hanya karakter yang disebut dalam skrip.",
     "Untuk video 8 scene, maksimal 2 scene boleh menampilkan tokoh utama secara jelas. Sisanya harus insert shot/POV/establishing shot. Kalau tokoh utama muncul, imagePrompt wajib menyebut nama, umur, outfit, smartphone, dan senter kecil yang sama.",
@@ -313,9 +316,9 @@ function normalizePlan(plan, input, memory) {
   const characterSceneIndexes = selectCharacterSceneIndexes(selectedScenes, input);
   return {
     title,
-    logline: stripContinuationLanguage(cleanText(plan?.logline || fallback.logline, 240)),
-    hook: stripContinuationLanguage(cleanText(plan?.hook || fallback.hook, 240)),
-    ending: stripContinuationLanguage(cleanText(plan?.ending || fallback.ending, 240)),
+    logline: sanitizeNarrationForSpeech(stripContinuationLanguage(cleanText(plan?.logline || fallback.logline, 240)), input),
+    hook: sanitizeNarrationForSpeech(stripContinuationLanguage(cleanText(plan?.hook || fallback.hook, 240)), input),
+    ending: sanitizeNarrationForSpeech(stripContinuationLanguage(cleanText(plan?.ending || fallback.ending, 240)), input),
     episode,
     scenes: selectedScenes.map((scene, index) => normalizeScene({
       ...scene,
@@ -332,13 +335,50 @@ function normalizeScene(scene, index, input, options = {}) {
   return {
     index: index + 1,
     durationSec,
-    narration: stripContinuationLanguage(cleanText(scene.narration || fallbackNarration(scene, input, index), 700)),
+    narration: sanitizeNarrationForSpeech(stripContinuationLanguage(cleanText(scene.narration || fallbackNarration(scene, input, index), 700)), input),
     screenText,
     imagePrompt: enhancePrompt(scene.imagePrompt || "", input, index, options),
     transition: cleanText(scene.transition || transitions[index % transitions.length], 80),
     effect: cleanText(scene.effect || "slow zoom, subtle film grain, dark vignette", 120),
     soundDesign: cleanText(scene.soundDesign || "low drone, faint room tone", 120)
   };
+}
+
+function sanitizeNarrationForSpeech(value, input) {
+  const name = cleanText(input.protagonistName || "Andi", 40) || "Andi";
+  const descriptiveFragment = /\b(pria|wanita|laki-laki|perempuan|indonesia|berusia|usia|umur|\d{1,2}\s*tahun|rambut|wajah|muka|ekspresi|jaket|denim|kaos|baju|celana|cargo|sneakers|sepatu|outfit|berjaket|berkaos|berbaju|bercelana|memakai|mengenakan|membawa\s+(?:smartphone|ponsel|hp|senter)|smartphone|ponsel|hp|senter kecil)\b/i;
+  let text = cleanText(value || "", 900)
+    .split(/(?<=[.!?])\s+/)
+    .map((sentence) => {
+      if (!new RegExp(`\\b${escapeRegExp(name)}\\b`, "i").test(sentence)) return sentence;
+      const parts = sentence.split(/,\s*/);
+      if (parts.length <= 1) return sentence;
+      const kept = [parts[0], ...parts.slice(1).filter((part) => !descriptiveFragment.test(part))];
+      return kept.join(", ");
+    })
+    .join(" ");
+
+  const namePattern = escapeRegExp(name);
+  text = text
+    .replace(new RegExp(`\\b${namePattern}\\s*,\\s*(?:pria|wanita|laki-laki|perempuan)(?:\\s+Indonesia)?\\s*(?:\\d{1,2}\\s*tahun)?\\s*,?\\s*`, "gi"), `${name} `)
+    .replace(/\b(?:pria|wanita|laki-laki|perempuan)\s+(?:Indonesia\s+)?\d{1,2}\s*tahun\b/gi, "")
+    .replace(/,\s*(?:rambut|wajah|muka|ekspresi|jaket|denim|kaos|baju|celana|cargo|sneakers|sepatu|outfit|berjaket|berkaos|berbaju|bercelana|memakai|mengenakan|membawa\s+(?:smartphone|ponsel|hp|senter)|smartphone|ponsel|hp|senter kecil)[^,.]*/gi, "")
+    .replace(new RegExp(`\\b${namePattern}\\s*,\\s*`, "gi"), `${name} `)
+    .replace(new RegExp(`\\b${namePattern}\\s+(?:mengeluarkan|mengangkat|mengarahkan)\\s+(?:smartphone|ponsel|hp)(?:-nya)?\\s*,\\s*`, "gi"), `${name} `)
+    .replace(/\b(?:memegang|membawa|mempersiapkan|menggenggam erat|menggenggam)\s+(?:smartphone|ponsel|hp)(?:-nya)?(?:\s+dan\s+senter\s+kecil(?:nya)?)?,?\s*/gi, "")
+    .replace(/\bsenter\s+kecil(?:nya)?\b/gi, "senter")
+    .replace(/\bsmartphone(?:-nya)?\b/gi, "HP")
+    .replace(/\b(memanggil|merekam|melihat|menatap|mendengar|menyentuh)-nya\b/gi, "$1nya")
+    .replace(/\s{2,}/g, " ")
+    .replace(/\s+,/g, ",")
+    .replace(/,\s*([.!?])/g, "$1")
+    .trim();
+
+  return text;
+}
+
+function escapeRegExp(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function enhancePrompt(prompt, input, index, options = {}) {
@@ -475,7 +515,7 @@ function normalizeEpisode(raw, fallback, title, input) {
     totalParts: input.totalParts,
     currentPart: input.partNumber,
     partTitle: cleanText(source.partTitle || fallback?.partTitle || title, 100),
-    arcSummary: cleanText(source.arcSummary || fallback?.arcSummary || "Satu episode mistis panjang yang dibagi menjadi beberapa part short.", 420),
+    arcSummary: sanitizeNarrationForSpeech(cleanText(source.arcSummary || fallback?.arcSummary || "Satu episode mistis panjang yang dibagi menjadi beberapa part short.", 420), input),
     partOutline
   };
 }
@@ -488,11 +528,30 @@ function normalizePartOutline(outline, input) {
     return {
       part,
       title: cleanText(item.title || `Part ${part}`, 80),
-      summary: cleanText(item.summary || `Peristiwa mistis meningkat di part ${part}.`, 220),
-      cliffhanger: stripContinuationLanguage(cleanText(item.cliffhanger || `Beat tegang untuk part ${part}.`, 180))
+      summary: sanitizeNarrationForSpeech(cleanText(item.summary || defaultPartSummary(part, input), 220), input),
+      cliffhanger: sanitizeNarrationForSpeech(stripContinuationLanguage(cleanText(item.cliffhanger || defaultPartCliffhanger(part, input), 180)), input)
     };
   });
   return items;
+}
+
+function defaultPartSummary(part, input) {
+  const focus = input.theme === "rumah" ? "rumah kosong, sumur, dan jendela gelap" : "gangguan utama";
+  if (part === input.totalParts) return `Misteri ${focus} mencapai titik akhir dan semua tanda dari part sebelumnya kembali menyatu.`;
+  return `Gangguan dari ${focus} makin dekat, meninggalkan petunjuk baru yang membuat tokoh utama sulit mundur.`;
+}
+
+function defaultPartCliffhanger(part, input) {
+  if (part === input.totalParts) return "Malam itu akhirnya memberi jawaban, tapi tidak semuanya bisa dibawa pulang.";
+  const beats = [
+    "Suara kecil terdengar dari tempat yang tadi kosong.",
+    "Bayangan di jendela bergerak sebelum lampu padam.",
+    "Rekaman memutar suara yang belum pernah diucapkan.",
+    "Pintu tua terbuka pelan dari sisi dalam.",
+    "Jejak basah muncul dan mengarah kembali ke sumur.",
+    "Nama tokoh utama terdengar dari ruang yang terkunci."
+  ];
+  return beats[(part - 1) % beats.length];
 }
 
 function buildFallbackEpisode(template, input) {
@@ -506,7 +565,7 @@ function buildFallbackEpisode(template, input) {
       summary: isFinal
         ? "Rahasia utama terbuka dan semua tanda dari part sebelumnya kembali dalam satu konfrontasi terakhir."
         : `Gangguan dari objek utama semakin dekat, membuka petunjuk baru dan risiko yang lebih personal di part ${part}.`,
-      cliffhanger: isFinal ? "Akhir episode mengunci nasib tokoh utama." : `Beat tegang untuk part ${part}.`
+      cliffhanger: defaultPartCliffhanger(part, input)
     };
   });
   return {
