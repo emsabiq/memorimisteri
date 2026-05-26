@@ -80,7 +80,7 @@ export async function generateSpeech({ storyId, text }) {
       model: config.openai.ttsModel,
       voice: config.openai.ttsVoice,
       input: text,
-      instructions: "Bacakan seperti narator cerita horor Indonesia: pelan, natural, dekat, tegang, tidak teatrikal berlebihan.",
+      instructions: "Bacakan sepenuhnya dalam Bahasa Indonesia dengan pelafalan Indonesia natural, bukan aksen Inggris. Suaranya dekat, pelan, tegang, seperti orang Indonesia menceritakan pengalaman mistis asli. Jangan terlalu teatrikal.",
       response_format: "mp3"
     })
   });

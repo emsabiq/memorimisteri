@@ -178,9 +178,9 @@ function renderCurrent() {
   els.audioStatus.textContent = story.assets.video?.audio === "tts"
     ? "Suara: TTS"
     : story.assets.video?.audio === "local-voice-horror-bed"
-      ? "Suara: voice lokal + ambience"
+      ? "Suara: voice Indonesia lokal + ambience"
     : story.assets.video?.audio === "fallback-horror-bed"
-      ? "Suara: ambience horor"
+      ? "Suara: ambience horor, TTS Indonesia belum aktif"
       : story.assets.audio?.url
         ? "Suara: TTS siap"
         : "Suara: belum dirender";
