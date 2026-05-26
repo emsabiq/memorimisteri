@@ -13,12 +13,34 @@ const scholarFontName = process.env.SUBTITLE_FONT_FAMILY || "Scholar";
 const scholarFontsDir = path.dirname(scholarRegularFont);
 const transitionDuration = 0.45;
 const endCardDuration = 2.4;
+const jumpScareDuration = Number.isFinite(Number(process.env.JUMPSCARE_SECONDS))
+  ? clamp(Number(process.env.JUMPSCARE_SECONDS), 0.45, 1.25)
+  : 0.78;
 const introFreezeDuration = Number.isFinite(Number(process.env.INTRO_FREEZE_SECONDS))
   ? clamp(Number(process.env.INTRO_FREEZE_SECONDS), 0.3, 2)
   : 0.8;
 const subtitleOffsetSeconds = Number.isFinite(Number(process.env.SUBTITLE_OFFSET_SECONDS))
   ? Number(process.env.SUBTITLE_OFFSET_SECONDS)
-  : -0.08;
+  : 0.02;
+const producerAudioDir = process.env.HORROR_AUDIO_DIR || "C:/Users/Lenovo/Downloads";
+const producerMusicNames = [
+  "Puncak Mencekam.mp3",
+  "Hawa Dingin Gaib.mp3",
+  "Gemetar Ketakutan.mp3",
+  "Sepi yang Mencekam.mp3",
+  "Ruang Hampa Mistik.mp3",
+  "Kabut Gaib (Ambient).mp3",
+  "Keheningan Mistik (Ambient).mp3",
+  "Bayangan Mistik.mp3"
+];
+const jumpScareSfxNames = [
+  "dragon-studio-woman-screaming-sfx-screaming-sound-effect-320169.mp3",
+  "cartoon-music-game-sfx-eerie-horror-stab-525381.mp3",
+  "cartoon-music-game-sfx-dynamite-exploding-525380.mp3"
+];
+const producerMusicVolume = Number.isFinite(Number(process.env.PRODUCER_MUSIC_VOLUME))
+  ? clamp(Number(process.env.PRODUCER_MUSIC_VOLUME), 0.025, 0.18)
+  : 0.075;
 
 export async function renderDraftVideo(story) {
   const workDir = path.join(paths.storyboardDir, story.id);
@@ -29,8 +51,13 @@ export async function renderDraftVideo(story) {
   const sourceAudioDuration = story.assets?.audio?.path ? await probeMediaDuration(story.assets.audio.path) : 0;
   const contentDuration = renderContentDuration(story, sourceAudioDuration);
   const captionScenes = buildRenderScenes(story, contentDuration);
-  const scenes = [buildIntroCoverScene(story, captionScenes[0]), ...withEndCardHold(captionScenes)];
+  const scenes = [buildIntroCoverScene(story, captionScenes[0]), ...captionScenes, ...buildEndingScenes(story, captionScenes.at(-1))];
+  const transitionDurations = scenes.map((scene, index) => {
+    if (index === scenes.length - 1) return 0;
+    return transitionDurationForBoundary(scene, scenes[index + 1]);
+  });
   const totalDuration = scenes.reduce((sum, scene) => sum + effectiveSceneDuration(scene), 0);
+  const jumpScareAt = introFreezeDuration + contentDuration + 0.04;
 
   const segmentPaths = [];
   const fallbackImages = [];
@@ -45,6 +72,7 @@ export async function renderDraftVideo(story) {
       textPaths,
       scene,
       segmentPath,
+      tailDuration: transitionDurations[index],
       isFirst: index === 0,
       isLast: index === scenes.length - 1
     });
@@ -52,7 +80,7 @@ export async function renderDraftVideo(story) {
   }
 
   const visualPath = path.join(workDir, "visual-transition.mp4");
-  await combineSegmentsWithOverlayFade({ segmentPaths, scenes, outputPath: visualPath });
+  await combineSegmentsWithOverlayFade({ segmentPaths, scenes, transitionDurations, outputPath: visualPath });
   const subtitlePath = path.join(workDir, "captions.ass");
   await writeSubtitleAss({
     outputPath: subtitlePath,
@@ -60,7 +88,8 @@ export async function renderDraftVideo(story) {
     scenes: captionScenes,
     contentDuration,
     totalDuration,
-    introDuration: introFreezeDuration
+    introDuration: introFreezeDuration,
+    endCardStart: introFreezeDuration + contentDuration + jumpScareDuration
   });
   const filename = `${story.id}-${safeFilename(story.title)}.mp4`;
   const outputPath = path.join(paths.videoDir, filename);
@@ -74,10 +103,12 @@ export async function renderDraftVideo(story) {
       outputPath: ttsMixPath,
       workDir,
       duration: totalDuration,
-      narrationDelay: introFreezeDuration
+      narrationDelay: introFreezeDuration,
+      jumpScareAt,
+      seedText: story.id || story.title
     });
     audioPath = ttsMixPath;
-    audioKind = "tts-horror-dramatic-music-mix";
+    audioKind = "tts-producer-horror-jumpscare-mix";
   } else {
     const narrationText = story.plan.scenes.map((scene) => scene.narration).join(" ");
     const fallbackAudio = await makeFallbackAudio({
@@ -85,7 +116,9 @@ export async function renderDraftVideo(story) {
       workDir,
       duration: totalDuration,
       text: narrationText,
-      narrationDelay: introFreezeDuration
+      narrationDelay: introFreezeDuration,
+      jumpScareAt,
+      seedText: story.id || story.title
     });
     audioPath = fallbackAudio.path;
     audioKind = fallbackAudio.kind;
@@ -114,7 +147,7 @@ function buildRenderScenes(story, targetDuration) {
       ...scene,
       kind: "content",
       storyTitle: story.title,
-      partLabel: headerLabel(episode)
+      partLabel: partLabel(episode)
     }));
   return contentScenes;
 }
@@ -143,14 +176,44 @@ function buildIntroCoverScene(story, firstScene) {
   };
 }
 
-function withEndCardHold(scenes) {
-  return scenes.map((scene, index) => {
-    if (index !== scenes.length - 1) return { ...scene };
-    return {
-      ...scene,
-      durationSec: Number((Math.max(1.5, Number(scene.durationSec || 4)) + endCardDuration).toFixed(2))
-    };
-  });
+function buildEndingScenes(story, lastScene) {
+  const sourceScene = lastScene || story.plan.scenes?.at(-1) || {};
+  const episode = story.plan.episode || {};
+  return [
+    {
+      ...sourceScene,
+      index: 98,
+      kind: "jumpscare",
+      durationSec: jumpScareDuration,
+      imageSourceSceneIndex: sourceScene.index || story.plan.scenes?.length || 1,
+      partLabel: partLabel(episode),
+      storyTitle: story.title,
+      screenText: "",
+      narration: "",
+      transition: "sudden jumpscare flash",
+      effect: "violent glitch zoom"
+    },
+    {
+      ...sourceScene,
+      index: 99,
+      kind: "endcard",
+      durationSec: endCardDuration,
+      imageSourceSceneIndex: sourceScene.index || story.plan.scenes?.length || 1,
+      partLabel: partLabel(episode),
+      storyTitle: story.title,
+      screenText: "Bersambung...",
+      narration: "",
+      transition: "fade to next part",
+      effect: "dark hold"
+    }
+  ];
+}
+
+function transitionDurationForBoundary(fromScene, toScene) {
+  if (toScene?.kind === "jumpscare") return 0.045;
+  if (fromScene?.kind === "jumpscare" || toScene?.kind === "endcard") return 0.22;
+  if (fromScene?.kind === "cover") return 0.18;
+  return transitionDuration;
 }
 
 function effectiveSceneDuration(scene) {
@@ -256,7 +319,7 @@ async function writeSegmentTextFiles({ story, scene, workDir }) {
     title: path.join(workDir, `scene-${scene.index}-title.txt`)
   };
   await fs.writeFile(files.part, formatLines(partText, 34, 1) || "PART 1");
-  await fs.writeFile(files.title, formatLines(titleText, scene.kind === "cover" ? 18 : scene.index === 1 ? 20 : 24, 2) || story.title);
+  await fs.writeFile(files.title, formatLines(titleText, scene.kind === "cover" ? 15 : scene.index === 1 ? 18 : 21, 2) || story.title);
   return files;
 }
 
@@ -268,9 +331,9 @@ function ffmpegPath(filePath) {
   return String(filePath || "").replace(/\\/g, "/").replace(/^([A-Za-z]):/, "$1\\:");
 }
 
-async function makeSegment({ imagePath, textPaths, scene, segmentPath, isFirst, isLast }) {
+async function makeSegment({ imagePath, textPaths, scene, segmentPath, tailDuration = transitionDuration, isFirst, isLast }) {
   const duration = effectiveSceneDuration(scene);
-  const renderDuration = duration + (isLast ? 0 : transitionDuration);
+  const renderDuration = duration + (isLast ? 0 : tailDuration);
   const regularFont = ffmpegPath(scholarRegularFont);
   const italicFont = ffmpegPath(scholarItalicFont);
   const partTextFile = ffmpegPath(textPaths.part);
@@ -283,8 +346,10 @@ async function makeSegment({ imagePath, textPaths, scene, segmentPath, isFirst, 
     `crop=${width}:${height}`,
     zoomFilter,
     "format=yuv420p",
-    "eq=contrast=1.08:saturation=1.08:brightness=0.06",
-    "noise=alls=5:allf=t+u",
+    scene.kind === "jumpscare"
+      ? "eq=contrast=1.36:saturation=0.72:brightness=0.02"
+      : "eq=contrast=1.08:saturation=1.08:brightness=0.06",
+    scene.kind === "jumpscare" ? "noise=alls=18:allf=t+u" : "noise=alls=5:allf=t+u",
     "drawbox=x=0:y=0:w=iw:h=ih:color=black@0.04:t=fill",
     ...overlays
   ];
@@ -317,23 +382,47 @@ async function makeSegment({ imagePath, textPaths, scene, segmentPath, isFirst, 
 function segmentTextOverlays({ scene, regularFont, italicFont, partTextFile, titleTextFile }) {
   if (scene.kind === "cover") {
     return [
-      "drawbox=x=0:y=0:w=iw:h=ih:color=black@0.34:t=fill",
-      `drawtext=fontfile='${italicFont}':textfile='${partTextFile}':x=(w-text_w)/2:y=520:fontsize=42:fontcolor=0xe2c483:borderw=2:bordercolor=black@0.9`,
-      `drawtext=fontfile='${regularFont}':textfile='${titleTextFile}':x=(w-text_w)/2:y=(h-text_h)/2:fontsize=92:fontcolor=0xf7f1e5:line_spacing=14:borderw=5:bordercolor=black@0.94`,
-      "drawbox=x=118:y=1430:w=844:h=2:color=0xe2c483@0.72:t=fill"
+      "drawbox=x=0:y=0:w=iw:h=ih:color=black@0.42:t=fill",
+      "drawbox=x=70:y=330:w=940:h=4:color=0xe2c483@0.72:t=fill",
+      "drawbox=x=70:y=1390:w=940:h=4:color=0xe2c483@0.72:t=fill",
+      `drawtext=fontfile='${italicFont}':text='KISAH MISTIS':x=(w-text_w)/2:y=380:fontsize=42:fontcolor=0xe2c483:borderw=2:bordercolor=black@0.86`,
+      `drawtext=fontfile='${italicFont}':textfile='${partTextFile}':x=(w-text_w)/2:y=495:fontsize=50:fontcolor=0xe2c483:borderw=3:bordercolor=black@0.9`,
+      `drawtext=fontfile='${regularFont}':textfile='${titleTextFile}':x=(w-text_w)/2:y=(h-text_h)/2-18:fontsize=108:fontcolor=0xf7f1e5:line_spacing=18:borderw=7:bordercolor=black@0.96:shadowx=0:shadowy=5:shadowcolor=black@0.72`,
+      `drawtext=fontfile='${italicFont}':text='jangan dengarkan sendirian':x=(w-text_w)/2:y=1442:fontsize=38:fontcolor=0xf7f1e5:borderw=2:bordercolor=black@0.88`
+    ];
+  }
+
+  if (scene.kind === "jumpscare") {
+    return [
+      "drawbox=x=0:y=0:w=iw:h=ih:color=black@0.16:t=fill",
+      "drawbox=x=0:y=0:w=iw:h=ih:color=white@0.62:t=fill:enable='between(t\\,0\\,0.055)+between(t\\,0.17\\,0.215)'",
+      "drawbox=x=0:y=0:w=iw:h=ih:color=0x6f0000@0.22:t=fill:enable='gte(t\\,0.08)'"
+    ];
+  }
+
+  if (scene.kind === "endcard") {
+    return [
+      "drawbox=x=0:y=0:w=iw:h=ih:color=black@0.58:t=fill",
+      "drawbox=x=120:y=840:w=840:h=3:color=0xe2c483@0.55:t=fill"
     ];
   }
 
   return [
-    "drawbox=x=0:y=0:w=iw:h=270:color=black@0.46:t=fill",
-    `drawtext=fontfile='${italicFont}':textfile='${partTextFile}':x=64:y=46:fontsize=34:fontcolor=0xe2c483:line_spacing=8`,
-    `drawtext=fontfile='${regularFont}':textfile='${titleTextFile}':x=64:y=105:fontsize=${scene.index === 1 ? 66 : 58}:fontcolor=0xf7f1e5:line_spacing=12:borderw=3:bordercolor=black@0.9`
+    "drawbox=x=0:y=0:w=iw:h=315:color=black@0.5:t=fill",
+    `drawtext=fontfile='${italicFont}':textfile='${partTextFile}':x=64:y=44:fontsize=40:fontcolor=0xe2c483:line_spacing=8:borderw=1:bordercolor=black@0.85`,
+    `drawtext=fontfile='${regularFont}':textfile='${titleTextFile}':x=64:y=112:fontsize=${scene.index === 1 ? 78 : 68}:fontcolor=0xf7f1e5:line_spacing=13:borderw=4:bordercolor=black@0.92`
   ];
 }
 
 function cameraMotionFilter(scene, frameCount) {
   if (scene.kind === "cover") {
     return `zoompan=z='1.0':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=${frameCount}:s=${width}x${height}:fps=${fps}`;
+  }
+  if (scene.kind === "jumpscare") {
+    return `zoompan=z='if(lt(on\\,2)\\,1.0\\,1.28+0.035*sin(on*2.9))':x='iw/2-(iw/zoom/2)+sin(on*1.2)*22':y='ih/2-(ih/zoom/2)+cos(on*1.7)*18':d=${frameCount}:s=${width}x${height}:fps=${fps}`;
+  }
+  if (scene.kind === "endcard") {
+    return `zoompan=z='1.03':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=${frameCount}:s=${width}x${height}:fps=${fps}`;
   }
   const text = `${scene.effect || ""} ${scene.transition || ""}`.toLowerCase();
   if (text.includes("out")) {
@@ -358,22 +447,23 @@ async function makeScenePreviewPng({ imagePath, outputPath }) {
   ]);
 }
 
-async function combineSegmentsWithOverlayFade({ segmentPaths, scenes, outputPath }) {
+async function combineSegmentsWithOverlayFade({ segmentPaths, scenes, transitionDurations, outputPath }) {
   if (segmentPaths.length === 1) {
     await fs.copyFile(segmentPaths[0], outputPath);
     return;
   }
 
   let currentPath = segmentPaths[0];
-  let currentDuration = effectiveSceneDuration(scenes[0]) + transitionDuration;
+  let currentDuration = effectiveSceneDuration(scenes[0]) + (transitionDurations[0] || 0);
   for (let index = 1; index < segmentPaths.length; index += 1) {
     const nextPath = segmentPaths[index];
-    const nextDuration = effectiveSceneDuration(scenes[index]) + (index === segmentPaths.length - 1 ? 0 : transitionDuration);
+    const boundaryDuration = transitionDurations[index - 1] || transitionDuration;
+    const nextDuration = effectiveSceneDuration(scenes[index]) + (transitionDurations[index] || 0);
     const mergedPath = index === segmentPaths.length - 1
       ? outputPath
       : path.join(path.dirname(outputPath), `visual-transition-${index}.mp4`);
-    const offset = Math.max(0.1, currentDuration - transitionDuration);
-    const padFrames = Math.max(1, Math.round(Math.max(0.1, nextDuration - transitionDuration) * fps));
+    const offset = Math.max(0.03, currentDuration - boundaryDuration);
+    const padFrames = Math.max(1, Math.round(Math.max(0.05, nextDuration - boundaryDuration) * fps));
 
     await runFfmpeg([
       "-y",
@@ -384,7 +474,7 @@ async function combineSegmentsWithOverlayFade({ segmentPaths, scenes, outputPath
       "-filter_complex",
       [
         `[0:v]fps=${fps},tpad=stop_mode=clone:stop=${padFrames},setpts=N/(${fps}*TB),format=yuv420p[base]`,
-        `[1:v]fps=${fps},setpts=PTS-STARTPTS+${offset.toFixed(3)}/TB,format=yuva420p,fade=t=in:st=${offset.toFixed(3)}:d=${transitionDuration.toFixed(2)}:alpha=1[over]`,
+        `[1:v]fps=${fps},setpts=PTS-STARTPTS+${offset.toFixed(3)}/TB,format=yuva420p,fade=t=in:st=${offset.toFixed(3)}:d=${boundaryDuration.toFixed(3)}:alpha=1[over]`,
         "[base][over]overlay=eof_action=pass:shortest=0,format=yuv420p[v]"
       ].join(";"),
       "-map",
@@ -399,11 +489,11 @@ async function combineSegmentsWithOverlayFade({ segmentPaths, scenes, outputPath
     ]);
 
     currentPath = mergedPath;
-    currentDuration = currentDuration + nextDuration - transitionDuration;
+    currentDuration = currentDuration + nextDuration - boundaryDuration;
   }
 }
 
-async function writeSubtitleAss({ outputPath, story, scenes, contentDuration, totalDuration, introDuration }) {
+async function writeSubtitleAss({ outputPath, story, scenes, contentDuration, totalDuration, introDuration, endCardStart }) {
   const events = [];
   const subtitleBase = Math.max(0, Number(introDuration || 0));
   let cursor = subtitleBase;
@@ -417,7 +507,7 @@ async function writeSubtitleAss({ outputPath, story, scenes, contentDuration, to
 
   events.push({
     layer: 3,
-    start: Math.max(0, subtitleBase + contentDuration - 0.05),
+    start: Math.max(0, Number(endCardStart || (subtitleBase + contentDuration)) + 0.03),
     end: totalDuration,
     style: "EndCard",
     text: "{\\fad(180,520)}Bersambung..."
@@ -652,7 +742,92 @@ function ffmpegFilterPath(filePath) {
     .replace(/'/g, "\\'");
 }
 
-async function makeHorrorMusicBed({ outputPath, duration }) {
+async function resolveAudioAssetPaths(names, envName) {
+  const configured = String((envName && process.env[envName]) || "")
+    .split(";")
+    .map((item) => item.trim())
+    .filter(Boolean);
+  const candidates = configured.length
+    ? configured
+    : names.map((name) => path.join(producerAudioDir, name));
+  const existing = [];
+  for (const candidate of candidates) {
+    try {
+      await fs.access(candidate);
+      existing.push(candidate);
+    } catch {
+      // Missing local audio is fine; renderer falls back to generated beds.
+    }
+  }
+  return existing;
+}
+
+async function makeHorrorMusicBed({ outputPath, duration, seedText }) {
+  const producerFiles = await resolveAudioAssetPaths(producerMusicNames, "HORROR_MUSIC_FILES");
+  if (producerFiles.length) {
+    await makeProducerMusicBed({ outputPath, duration, sourcePaths: selectProducerMusicFiles(producerFiles, seedText) });
+    return outputPath;
+  }
+  return makeSyntheticHorrorMusicBed({ outputPath, duration });
+}
+
+async function makeProducerMusicBed({ outputPath, duration, sourcePaths }) {
+  const selected = sourcePaths.filter(Boolean).slice(0, 3);
+  if (!selected.length) return makeSyntheticHorrorMusicBed({ outputPath, duration });
+
+  const total = Math.max(1, Number(duration || 1));
+  const tensionStart = Math.max(4, total * 0.34);
+  const climaxStart = Math.max(tensionStart + 3, total - 13);
+  const fadeOutAt = Math.max(0.5, total - 1.2).toFixed(2);
+  const args = ["-y"];
+  for (const sourcePath of selected) args.push("-stream_loop", "-1", "-i", sourcePath);
+
+  const filters = [];
+  filters.push(`[0:a]atrim=0:${total.toFixed(3)},asetpts=PTS-STARTPTS,volume=${producerMusicVolume.toFixed(3)},highpass=f=38,lowpass=f=5200,afade=t=in:st=0:d=1.1,afade=t=out:st=${fadeOutAt}:d=1.1[m0]`);
+  if (selected[1]) {
+    const tensionLength = Math.max(1, total - tensionStart);
+    filters.push(`[1:a]atrim=0:${tensionLength.toFixed(3)},asetpts=PTS-STARTPTS,volume=${(producerMusicVolume * 0.72).toFixed(3)},highpass=f=45,lowpass=f=4800,afade=t=in:st=0:d=1.4,adelay=${Math.round(tensionStart * 1000)}:all=1[m1]`);
+  }
+  if (selected[2]) {
+    const climaxLength = Math.max(1, total - climaxStart);
+    filters.push(`[2:a]atrim=0:${climaxLength.toFixed(3)},asetpts=PTS-STARTPTS,volume=${(producerMusicVolume * 0.78).toFixed(3)},highpass=f=52,lowpass=f=5600,afade=t=in:st=0:d=0.8,adelay=${Math.round(climaxStart * 1000)}:all=1[m2]`);
+  }
+
+  const labels = selected.map((_, index) => `[m${index}]`).join("");
+  filters.push(`${labels}amix=inputs=${selected.length}:duration=longest:normalize=0,lowpass=f=6200,alimiter=limit=0.55[a]`);
+
+  await runFfmpeg([
+    ...args,
+    "-filter_complex",
+    filters.join(";"),
+    "-map",
+    "[a]",
+    "-t",
+    total.toFixed(3),
+    "-c:a",
+    "pcm_s16le",
+    "-ar",
+    "44100",
+    outputPath
+  ]);
+
+  return outputPath;
+}
+
+function selectProducerMusicFiles(sourcePaths, seedText) {
+  if (sourcePaths.length <= 3) return sourcePaths;
+  const seed = hashText(seedText || sourcePaths.join("|"));
+  const ambient = sourcePaths.filter((item) => /ambient|kabut|keheningan|ruang|sepi/i.test(path.basename(item)));
+  const dramatic = sourcePaths.filter((item) => /puncak|hawa|gemetar|bayangan/i.test(path.basename(item)));
+  const pick = (items, offset) => items[(seed + offset) % items.length];
+  return [
+    pick(ambient.length ? ambient : sourcePaths, 0),
+    pick(dramatic.length ? dramatic : sourcePaths, 3),
+    pick(sourcePaths, 6)
+  ].filter((item, index, array) => item && array.indexOf(item) === index);
+}
+
+async function makeSyntheticHorrorMusicBed({ outputPath, duration }) {
   const sampleRate = 44100;
   const sampleCount = Math.max(1, Math.ceil(Number(duration || 1) * sampleRate));
   const buffer = Buffer.alloc(44 + sampleCount * 2);
@@ -705,11 +880,12 @@ async function makeHorrorMusicBed({ outputPath, duration }) {
   return outputPath;
 }
 
-async function makeFallbackAudio({ outputPath, workDir, duration, text, narrationDelay = 0 }) {
+async function makeFallbackAudio({ outputPath, workDir, duration, text, narrationDelay = 0, jumpScareAt = 0, seedText }) {
   const narrationPath = outputPath.replace(/\.m4a$/i, "-narration.wav");
   const narrationTextPath = outputPath.replace(/\.m4a$/i, "-narration.txt");
+  const baseOutputPath = outputPath.replace(/\.m4a$/i, "-base.m4a");
   const musicPath = path.join(workDir || path.dirname(outputPath), "dramatic-horror-music.wav");
-  await makeHorrorMusicBed({ outputPath: musicPath, duration });
+  await makeHorrorMusicBed({ outputPath: musicPath, duration, seedText });
   const delayMs = Math.max(0, Math.round(Number(narrationDelay || 0) * 1000));
   let hasNarration = false;
   try {
@@ -813,33 +989,41 @@ async function makeFallbackAudio({ outputPath, workDir, duration, text, narratio
     "44100",
     "-b:a",
     "160k",
-    outputPath
+    baseOutputPath
   );
 
   await runFfmpeg(args);
+  await addJumpScareSfx({
+    basePath: baseOutputPath,
+    outputPath,
+    workDir,
+    duration,
+    jumpScareAt
+  });
 
   return {
     path: outputPath,
-    kind: hasNarration ? "local-voice-horror-bed" : "fallback-horror-bed"
+    kind: hasNarration ? "local-voice-producer-horror-jumpscare-mix" : "fallback-producer-horror-jumpscare-mix"
   };
 }
 
-async function makeTtsHorrorMix({ inputPath, outputPath, workDir, duration, narrationDelay = 0 }) {
+async function makeTtsHorrorMix({ inputPath, outputPath, workDir, duration, narrationDelay = 0, jumpScareAt = 0, seedText }) {
+  const baseOutputPath = outputPath.replace(/\.m4a$/i, "-base.m4a");
   const musicPath = path.join(workDir || path.dirname(outputPath), "dramatic-horror-music.wav");
-  await makeHorrorMusicBed({ outputPath: musicPath, duration });
+  await makeHorrorMusicBed({ outputPath: musicPath, duration, seedText });
   const delayMs = Math.max(0, Math.round(Number(narrationDelay || 0) * 1000));
   const fadeOutAt = Math.max(0.5, duration - 0.7).toFixed(2);
   const filter = [
-    `[0:a]adelay=${delayMs}:all=1,volume=2.3,aecho=0.58:0.28:82:0.18,highpass=f=85,lowpass=f=5600,dynaudnorm=f=120:g=13[n]`,
-    "[1:a]volume=0.4,lowpass=f=95,aecho=0.6:0.28:960:0.2[a0]",
-    "[2:a]volume=0.25,lowpass=f=230,tremolo=f=0.2:d=0.9[a1]",
-    "[3:a]volume=0.15,lowpass=f=460,tremolo=f=0.34:d=0.82,aecho=0.45:0.25:760:0.2[a2]",
-    "[4:a]volume=0.34,highpass=f=72,lowpass=f=1450[a3]",
-    "[5:a]volume=0.12,highpass=f=900,lowpass=f=3900,tremolo=f=8.5:d=0.76[a4]",
-    "[6:a]volume=0.19,highpass=f=160,lowpass=f=780,tremolo=f=0.42:d=0.88,aecho=0.55:0.28:1180:0.22[a5]",
-    "[7:a]volume=0.18,highpass=f=105,lowpass=f=620,tremolo=f=0.12:d=0.92,aecho=0.62:0.32:1420:0.28[m0]",
-    "[8:a]volume=0.075,highpass=f=240,lowpass=f=1300,tremolo=f=5.2:d=0.42,aecho=0.38:0.22:520:0.16[m1]",
-    "[9:a]volume=0.95,highpass=f=32,lowpass=f=4200,aecho=0.5:0.28:1180:0.18[music]",
+    `[0:a]adelay=${delayMs}:all=1,volume=2.55,aecho=0.5:0.22:70:0.14,highpass=f=85,lowpass=f=5800,dynaudnorm=f=110:g=15[n]`,
+    "[1:a]volume=0.24,lowpass=f=95,aecho=0.6:0.28:960:0.2[a0]",
+    "[2:a]volume=0.13,lowpass=f=230,tremolo=f=0.2:d=0.9[a1]",
+    "[3:a]volume=0.08,lowpass=f=460,tremolo=f=0.34:d=0.82,aecho=0.45:0.25:760:0.2[a2]",
+    "[4:a]volume=0.18,highpass=f=72,lowpass=f=1450[a3]",
+    "[5:a]volume=0.06,highpass=f=900,lowpass=f=3900,tremolo=f=8.5:d=0.76[a4]",
+    "[6:a]volume=0.1,highpass=f=160,lowpass=f=780,tremolo=f=0.42:d=0.88,aecho=0.55:0.28:1180:0.22[a5]",
+    "[7:a]volume=0.1,highpass=f=105,lowpass=f=620,tremolo=f=0.12:d=0.92,aecho=0.62:0.32:1420:0.28[m0]",
+    "[8:a]volume=0.045,highpass=f=240,lowpass=f=1300,tremolo=f=5.2:d=0.42,aecho=0.38:0.22:520:0.16[m1]",
+    "[9:a]volume=0.82,highpass=f=32,lowpass=f=4200,aecho=0.5:0.28:1180:0.18[music]",
     `[n][a0][a1][a2][a3][a4][a5][m0][m1][music]amix=inputs=10:duration=longest:normalize=0,lowpass=f=7400,volume=1.08,alimiter=limit=0.95,afade=t=in:st=0:d=0.2,afade=t=out:st=${fadeOutAt}:d=0.65[a]`
   ].join(";");
 
@@ -909,8 +1093,111 @@ async function makeTtsHorrorMix({ inputPath, outputPath, workDir, duration, narr
     "44100",
     "-b:a",
     "160k",
+    baseOutputPath
+  ]);
+
+  await addJumpScareSfx({
+    basePath: baseOutputPath,
+    outputPath,
+    workDir,
+    duration,
+    jumpScareAt
+  });
+}
+
+async function addJumpScareSfx({ basePath, outputPath, workDir, duration, jumpScareAt }) {
+  const sfxPath = path.join(workDir || path.dirname(outputPath), "jumpscare-sfx.wav");
+  await makeJumpScareSfxBed({ outputPath: sfxPath, duration, jumpScareAt });
+  await runFfmpeg([
+    "-y",
+    "-i",
+    basePath,
+    "-i",
+    sfxPath,
+    "-filter_complex",
+    "[0:a]volume=1.0[base];[1:a]volume=1.0[sfx];[base][sfx]amix=inputs=2:duration=longest:normalize=0,alimiter=limit=0.96[a]",
+    "-map",
+    "[a]",
+    "-t",
+    Number(duration).toFixed(3),
+    "-c:a",
+    "aac",
+    "-ar",
+    "44100",
+    "-b:a",
+    "192k",
     outputPath
   ]);
+}
+
+async function makeJumpScareSfxBed({ outputPath, duration, jumpScareAt }) {
+  const sourcePaths = await resolveAudioAssetPaths(jumpScareSfxNames, "JUMPSCARE_SFX_FILES");
+  if (!sourcePaths.length) return makeSyntheticJumpScareSfxBed({ outputPath, duration, jumpScareAt });
+
+  const total = Math.max(1, Number(duration || 1));
+  const start = clamp(Number(jumpScareAt || total - 3), 0.2, Math.max(0.2, total - 0.9));
+  const args = ["-y"];
+  for (const sourcePath of sourcePaths) args.push("-i", sourcePath);
+
+  const offsets = [-0.08, 0, 0.14];
+  const lengths = [1.7, 1.05, 1.35];
+  const volumes = [0.62, 0.58, 0.34];
+  const filters = sourcePaths.map((_, index) => {
+    const offsetMs = Math.max(0, Math.round((start + (offsets[index] || 0)) * 1000));
+    return `[${index}:a]atrim=0:${lengths[index] || 1.1},asetpts=PTS-STARTPTS,volume=${volumes[index] || 0.38},highpass=f=75,lowpass=f=9200,afade=t=out:st=${Math.max(0.25, (lengths[index] || 1.1) - 0.22).toFixed(2)}:d=0.22,adelay=${offsetMs}:all=1[s${index}]`;
+  });
+  const labels = sourcePaths.map((_, index) => `[s${index}]`).join("");
+  filters.push(`${labels}amix=inputs=${sourcePaths.length}:duration=longest:normalize=0,alimiter=limit=0.9[a]`);
+
+  await runFfmpeg([
+    ...args,
+    "-filter_complex",
+    filters.join(";"),
+    "-map",
+    "[a]",
+    "-t",
+    total.toFixed(3),
+    "-c:a",
+    "pcm_s16le",
+    "-ar",
+    "44100",
+    outputPath
+  ]);
+
+  return outputPath;
+}
+
+async function makeSyntheticJumpScareSfxBed({ outputPath, duration, jumpScareAt }) {
+  const total = Math.max(1, Number(duration || 1));
+  const start = clamp(Number(jumpScareAt || total - 3), 0.2, Math.max(0.2, total - 0.9));
+  const startMs = Math.round(start * 1000);
+  await runFfmpeg([
+    "-y",
+    "-f",
+    "lavfi",
+    "-t",
+    "1.2",
+    "-i",
+    "anoisesrc=color=white:amplitude=0.38:sample_rate=44100",
+    "-f",
+    "lavfi",
+    "-t",
+    "1.0",
+    "-i",
+    "sine=frequency=880:sample_rate=44100",
+    "-filter_complex",
+    `[0:a]highpass=f=500,lowpass=f=7000,volume=0.5,adelay=${startMs}:all=1[s0];[1:a]volume=0.35,aecho=0.5:0.25:110:0.18,adelay=${startMs + 80}:all=1[s1];[s0][s1]amix=inputs=2:duration=longest:normalize=0,alimiter=limit=0.86[a]`,
+    "-map",
+    "[a]",
+    "-t",
+    total.toFixed(3),
+    "-c:a",
+    "pcm_s16le",
+    "-ar",
+    "44100",
+    outputPath
+  ]);
+  return outputPath;
 }
 
 function makeWindowsNarration({ textPath, outputPath }) {
@@ -1152,8 +1439,12 @@ function probeMediaDuration(filePath) {
 
 function hashScene(scene) {
   const text = `${scene.screenText || ""}${scene.narration || ""}`;
+  return hashText(text);
+}
+
+function hashText(text) {
   let hash = 0;
-  for (let i = 0; i < text.length; i += 1) hash = (hash * 31 + text.charCodeAt(i)) >>> 0;
+  for (let i = 0; i < String(text || "").length; i += 1) hash = (hash * 31 + String(text || "").charCodeAt(i)) >>> 0;
   return hash || 1;
 }
 
