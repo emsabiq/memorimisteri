@@ -9,6 +9,13 @@ const height = 1920;
 const fps = 30;
 const scholarRegularFont = process.env.SCHOLAR_FONT_PATH || "C:/Users/Lenovo/AppData/Local/Microsoft/Windows/Fonts/scholar-regular.otf";
 const scholarItalicFont = process.env.SCHOLAR_ITALIC_FONT_PATH || "C:/Users/Lenovo/AppData/Local/Microsoft/Windows/Fonts/scholar-italic.otf";
+const scholarFontName = process.env.SUBTITLE_FONT_FAMILY || "Scholar";
+const scholarFontsDir = path.dirname(scholarRegularFont);
+const transitionDuration = 0.45;
+const endCardDuration = 2.4;
+const subtitleOffsetSeconds = Number.isFinite(Number(process.env.SUBTITLE_OFFSET_SECONDS))
+  ? Number(process.env.SUBTITLE_OFFSET_SECONDS)
+  : -0.22;
 
 export async function renderDraftVideo(story) {
   const workDir = path.join(paths.storyboardDir, story.id);
@@ -16,24 +23,43 @@ export async function renderDraftVideo(story) {
   await fs.mkdir(paths.videoDir, { recursive: true });
   await fs.mkdir(paths.imageDir, { recursive: true });
 
+  const sourceAudioDuration = story.assets?.audio?.path ? await probeMediaDuration(story.assets.audio.path) : 0;
+  const contentDuration = renderContentDuration(story, sourceAudioDuration);
+  const captionScenes = buildRenderScenes(story, contentDuration);
+  const scenes = withEndCardHold(captionScenes);
+  const totalDuration = scenes.reduce((sum, scene) => sum + Math.max(1.5, Number(scene.durationSec || 4)), 0);
+
   const segmentPaths = [];
   const fallbackImages = [];
-  const scenes = buildRenderScenes(story);
-  for (const scene of scenes) {
+  for (let index = 0; index < scenes.length; index += 1) {
+    const scene = scenes[index];
     const image = await resolveSceneImage(story, scene, workDir);
     if (image.asset) fallbackImages.push(image.asset);
     const textPaths = await writeSegmentTextFiles({ story, scene, workDir });
     const segmentPath = path.join(workDir, `scene-${scene.index}.mp4`);
-    await makeSegment({ imagePath: image.path, textPaths, scene, segmentPath });
+    await makeSegment({
+      imagePath: image.path,
+      textPaths,
+      scene,
+      segmentPath,
+      isFirst: index === 0,
+      isLast: index === scenes.length - 1
+    });
     segmentPaths.push(segmentPath);
   }
 
-  const concatPath = path.join(workDir, "concat.txt");
-  await fs.writeFile(concatPath, segmentPaths.map((file) => `file '${file.replace(/\\/g, "/")}'`).join("\n"));
-
+  const visualPath = path.join(workDir, "visual-transition.mp4");
+  await combineSegmentsWithOverlayFade({ segmentPaths, scenes, outputPath: visualPath });
+  const subtitlePath = path.join(workDir, "captions.ass");
+  await writeSubtitleAss({
+    outputPath: subtitlePath,
+    story,
+    scenes: captionScenes,
+    contentDuration,
+    totalDuration
+  });
   const filename = `${story.id}-${safeFilename(story.title)}.mp4`;
   const outputPath = path.join(paths.videoDir, filename);
-  const totalDuration = scenes.reduce((sum, scene) => sum + Math.max(1.5, Number(scene.durationSec || 4)), 0);
   const fallbackAudioPath = path.join(workDir, "fallback-horror-bed.m4a");
   let audioPath;
   let audioKind;
@@ -41,7 +67,7 @@ export async function renderDraftVideo(story) {
     const ttsMixPath = path.join(workDir, "tts-horror-mix.m4a");
     await makeTtsHorrorMix({ inputPath: story.assets.audio.path, outputPath: ttsMixPath, duration: totalDuration });
     audioPath = ttsMixPath;
-    audioKind = "tts-horror-mix";
+    audioKind = "tts-horror-backsong-mix";
   } else {
     const narrationText = story.plan.scenes.map((scene) => scene.narration).join(" ");
     const fallbackAudio = await makeFallbackAudio({ outputPath: fallbackAudioPath, duration: totalDuration, text: narrationText });
@@ -49,10 +75,7 @@ export async function renderDraftVideo(story) {
     audioKind = fallbackAudio.kind;
   }
 
-  const args = ["-y", "-f", "concat", "-safe", "0", "-i", concatPath, "-i", audioPath];
-  args.push("-map", "0:v:0", "-map", "1:a:0", "-shortest", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "160k");
-  args.push(outputPath);
-  await runFfmpeg(args);
+  await muxVideoAudioWithAss({ videoPath: visualPath, audioPath, assPath: subtitlePath, outputPath, totalDuration });
 
   return {
     video: {
@@ -67,10 +90,10 @@ export async function renderDraftVideo(story) {
   };
 }
 
-function buildRenderScenes(story) {
-  const targetDuration = clamp(Number(story.input?.durationSec || 60), 45, 60);
+function buildRenderScenes(story, targetDuration) {
+  const targetContentDuration = Math.max(8, Number(targetDuration || story.input?.durationSec || 60));
   const episode = story.plan.episode || {};
-  const contentScenes = fitContentScenes(story.plan.scenes, targetDuration)
+  const contentScenes = fitContentScenes(story.plan.scenes, targetContentDuration)
     .map((scene) => ({
       ...scene,
       kind: "content",
@@ -78,6 +101,23 @@ function buildRenderScenes(story) {
       partLabel: headerLabel(episode)
     }));
   return contentScenes;
+}
+
+function renderContentDuration(story, sourceAudioDuration) {
+  const requestedDuration = clamp(Number(story.input?.durationSec || 60), 45, 60);
+  const requestedContentDuration = Math.max(8, requestedDuration - endCardDuration);
+  const narrationDuration = sourceAudioDuration > 0 ? Number((sourceAudioDuration + 0.25).toFixed(2)) : 0;
+  return Math.max(requestedContentDuration, narrationDuration);
+}
+
+function withEndCardHold(scenes) {
+  return scenes.map((scene, index) => {
+    if (index !== scenes.length - 1) return { ...scene };
+    return {
+      ...scene,
+      durationSec: Number((Math.max(1.5, Number(scene.durationSec || 4)) + endCardDuration).toFixed(2))
+    };
+  });
 }
 
 function headerLabel(episode) {
@@ -167,20 +207,12 @@ async function writeSegmentTextFiles({ story, scene, workDir }) {
   const episode = story.plan.episode || {};
   const partText = scene.partLabel || partLabel(episode);
   const titleText = scene.index === 1 ? (story.plan.episode?.title || scene.storyTitle || story.title) : scene.screenText;
-  const subtitleText = scene.narration;
   const files = {
     part: path.join(workDir, `scene-${scene.index}-part.txt`),
-    title: path.join(workDir, `scene-${scene.index}-title.txt`),
-    subtitles: []
+    title: path.join(workDir, `scene-${scene.index}-title.txt`)
   };
   await fs.writeFile(files.part, formatLines(partText, 34, 1) || "PART 1");
   await fs.writeFile(files.title, formatLines(titleText, scene.index === 1 ? 20 : 24, 2) || story.title);
-  const words = splitSubtitleWords(subtitleText);
-  for (let index = 0; index < words.length; index += 1) {
-    const subtitlePath = path.join(workDir, `scene-${scene.index}-subtitle-${index + 1}.txt`);
-    await fs.writeFile(subtitlePath, formatLines(words[index], 18, 1) || "");
-    files.subtitles.push(subtitlePath);
-  }
   return files;
 }
 
@@ -188,31 +220,25 @@ function formatLines(value, maxChars, maxLines) {
   return splitLines(value, maxChars).slice(0, maxLines).join("\n");
 }
 
-function splitSubtitleWords(value) {
-  const words = String(value || "").trim().split(/\s+/).filter(Boolean);
-  return words.length ? words : [""];
-}
-
 function ffmpegPath(filePath) {
   return String(filePath || "").replace(/\\/g, "/").replace(/^([A-Za-z]):/, "$1\\:");
 }
 
-async function makeSegment({ imagePath, textPaths, scene, segmentPath }) {
+async function makeSegment({ imagePath, textPaths, scene, segmentPath, isFirst, isLast }) {
   const duration = Math.max(1.5, Number(scene.durationSec || 4));
+  const renderDuration = duration + (isLast ? 0 : transitionDuration);
   const regularFont = ffmpegPath(scholarRegularFont);
   const italicFont = ffmpegPath(scholarItalicFont);
   const partTextFile = ffmpegPath(textPaths.part);
   const titleTextFile = ffmpegPath(textPaths.title);
-  const fadeOutAt = Math.max(0.8, duration - 0.28).toFixed(2);
-  const frameCount = Math.ceil(duration * fps);
+  const frameCount = Math.ceil(renderDuration * fps);
   const overlays = [
     "drawbox=x=0:y=0:w=iw:h=270:color=black@0.46:t=fill",
     `drawtext=fontfile='${italicFont}':textfile='${partTextFile}':x=64:y=46:fontsize=34:fontcolor=0xe2c483:line_spacing=8`,
-    `drawtext=fontfile='${regularFont}':textfile='${titleTextFile}':x=64:y=105:fontsize=${scene.index === 1 ? 66 : 58}:fontcolor=0xf7f1e5:line_spacing=12:borderw=3:bordercolor=black@0.9`,
-    ...subtitleOverlays({ regularFont, subtitleFiles: textPaths.subtitles, duration })
+    `drawtext=fontfile='${regularFont}':textfile='${titleTextFile}':x=64:y=105:fontsize=${scene.index === 1 ? 66 : 58}:fontcolor=0xf7f1e5:line_spacing=12:borderw=3:bordercolor=black@0.9`
   ];
   const zoomFilter = cameraMotionFilter(scene, frameCount);
-  const vf = [
+  const vfParts = [
     `scale=${width}:${height}:force_original_aspect_ratio=increase`,
     `crop=${width}:${height}`,
     zoomFilter,
@@ -220,17 +246,17 @@ async function makeSegment({ imagePath, textPaths, scene, segmentPath }) {
     "eq=contrast=1.08:saturation=1.08:brightness=0.06",
     "noise=alls=5:allf=t+u",
     "drawbox=x=0:y=0:w=iw:h=ih:color=black@0.04:t=fill",
-    ...overlays,
-    "fade=t=in:st=0:d=0.16",
-    `fade=t=out:st=${fadeOutAt}:d=0.25`
-  ].join(",");
+    ...overlays
+  ];
+  if (isFirst) vfParts.push("fade=t=in:st=0:d=0.16");
+  const vf = vfParts.join(",");
 
   await runFfmpeg([
     "-y",
     "-loop",
     "1",
     "-t",
-    String(duration),
+    String(renderDuration),
     "-i",
     imagePath,
     "-vf",
@@ -246,17 +272,6 @@ async function makeSegment({ imagePath, textPaths, scene, segmentPath }) {
     "yuv420p",
     segmentPath
   ]);
-}
-
-function subtitleOverlays({ regularFont, subtitleFiles, duration }) {
-  const files = subtitleFiles?.length ? subtitleFiles : [];
-  const step = duration / Math.max(1, files.length);
-  return files.map((file, index) => {
-    const start = Math.max(0, index * step);
-    const end = Math.max(start + 0.22, Math.min(duration, (index + 1) * step + 0.05));
-    const enable = `between(t\\,${start.toFixed(2)}\\,${end.toFixed(2)})`;
-    return `drawtext=fontfile='${regularFont}':textfile='${ffmpegPath(file)}':x=(w-text_w)/2:y=h-330:fontsize=76:fontcolor=0xfff4cf:line_spacing=10:box=1:boxcolor=black@0.72:boxborderw=34:borderw=3:bordercolor=black@0.95:enable='${enable}'`;
-  });
 }
 
 function cameraMotionFilter(scene, frameCount) {
@@ -283,6 +298,251 @@ async function makeScenePreviewPng({ imagePath, outputPath }) {
   ]);
 }
 
+async function combineSegmentsWithOverlayFade({ segmentPaths, scenes, outputPath }) {
+  if (segmentPaths.length === 1) {
+    await fs.copyFile(segmentPaths[0], outputPath);
+    return;
+  }
+
+  let currentPath = segmentPaths[0];
+  let currentDuration = Math.max(1.5, Number(scenes[0]?.durationSec || 4)) + transitionDuration;
+  for (let index = 1; index < segmentPaths.length; index += 1) {
+    const nextPath = segmentPaths[index];
+    const nextDuration = Math.max(1.5, Number(scenes[index]?.durationSec || 4)) + (index === segmentPaths.length - 1 ? 0 : transitionDuration);
+    const mergedPath = index === segmentPaths.length - 1
+      ? outputPath
+      : path.join(path.dirname(outputPath), `visual-transition-${index}.mp4`);
+    const offset = Math.max(0.1, currentDuration - transitionDuration);
+    const padFrames = Math.max(1, Math.round(Math.max(0.1, nextDuration - transitionDuration) * fps));
+
+    await runFfmpeg([
+      "-y",
+      "-i",
+      currentPath,
+      "-i",
+      nextPath,
+      "-filter_complex",
+      [
+        `[0:v]fps=${fps},tpad=stop_mode=clone:stop=${padFrames},setpts=N/(${fps}*TB),format=yuv420p[base]`,
+        `[1:v]fps=${fps},setpts=PTS-STARTPTS+${offset.toFixed(3)}/TB,format=yuva420p,fade=t=in:st=${offset.toFixed(3)}:d=${transitionDuration.toFixed(2)}:alpha=1[over]`,
+        "[base][over]overlay=eof_action=pass:shortest=0,format=yuv420p[v]"
+      ].join(";"),
+      "-map",
+      "[v]",
+      "-r",
+      String(fps),
+      "-c:v",
+      "libx264",
+      "-pix_fmt",
+      "yuv420p",
+      mergedPath
+    ]);
+
+    currentPath = mergedPath;
+    currentDuration = currentDuration + nextDuration - transitionDuration;
+  }
+}
+
+async function writeSubtitleAss({ outputPath, story, scenes, contentDuration, totalDuration }) {
+  const events = [];
+  let cursor = 0;
+  for (const scene of scenes) {
+    const duration = Math.max(1.5, Number(scene.durationSec || 4));
+    const start = cursor + subtitleOffsetSeconds;
+    const end = cursor + duration + subtitleOffsetSeconds;
+    events.push(...captionEventsForCue(scene.narration, start, end));
+    cursor += duration;
+  }
+
+  events.push({
+    layer: 3,
+    start: Math.max(0, contentDuration - 0.05),
+    end: totalDuration,
+    style: "EndCard",
+    text: "{\\fad(180,520)}Bersambung..."
+  });
+
+  const title = assEscape(story.title || "Mistis");
+  const body = [
+    "[Script Info]",
+    `Title: ${title}`,
+    "ScriptType: v4.00+",
+    "WrapStyle: 0",
+    "ScaledBorderAndShadow: yes",
+    `PlayResX: ${width}`,
+    `PlayResY: ${height}`,
+    "",
+    "[V4+ Styles]",
+    "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding",
+    `Style: Caption,${assStyleValue(scholarFontName)},68,&H00FFFFFF,&H0000FFFF,&H00111111,&H88000000,-1,0,0,0,100,100,0,0,1,5,2,2,86,86,500,1`,
+    `Style: EndCard,${assStyleValue(scholarFontName)},88,&H00F7F1E5,&H00F7F1E5,&H00111111,&H99000000,-1,0,0,0,100,100,0,0,1,5,2,5,80,80,0,1`,
+    "",
+    "[Events]",
+    "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text",
+    ...events
+      .filter((event) => event.end > event.start + 0.08)
+      .map((event) => {
+        const marginV = event.style === "Caption" ? "500" : "0";
+        return `Dialogue: ${event.layer || 0},${secondsToAss(event.start)},${secondsToAss(event.end)},${event.style || "Caption"},,0,0,${marginV},,${event.text}`;
+      })
+  ].join("\n");
+
+  await fs.writeFile(outputPath, `${body}\n`, "utf8");
+}
+
+function captionEventsForCue(text, cueStart, cueEnd) {
+  const chunks = wrapCaptionChunks(text);
+  if (!chunks.length) return [];
+
+  const start = Math.max(0, cueStart);
+  const end = Math.max(start + 0.25, cueEnd);
+  const duration = end - start;
+  const chunkDuration = duration / chunks.length;
+  const events = [];
+
+  for (let chunkIndex = 0; chunkIndex < chunks.length; chunkIndex += 1) {
+    const lines = chunks[chunkIndex];
+    const chunkStart = start + (chunkDuration * chunkIndex);
+    const chunkEnd = chunkIndex === chunks.length - 1 ? end : start + (chunkDuration * (chunkIndex + 1));
+    const words = lines.join(" ").split(/\s+/).filter(Boolean);
+    if (!words.length || chunkEnd <= chunkStart) continue;
+
+    const wordSlot = (chunkEnd - chunkStart) / words.length;
+    for (let wordIndex = 0; wordIndex < words.length; wordIndex += 1) {
+      const wordStart = chunkStart + (wordSlot * wordIndex);
+      const wordEnd = wordIndex === words.length - 1 ? chunkEnd : Math.min(chunkEnd, wordStart + wordSlot);
+      if (wordEnd <= wordStart + 0.05) continue;
+      events.push({
+        layer: 1,
+        start: wordStart,
+        end: wordEnd,
+        style: "Caption",
+        text: formatHighlightedAssCaption(lines, wordIndex)
+      });
+    }
+  }
+
+  return events;
+}
+
+function wrapCaptionChunks(text) {
+  const words = String(text || "").replace(/\s+/g, " ").trim().split(/\s+/).filter(Boolean);
+  if (!words.length) return [];
+
+  const chunks = [];
+  let lines = [];
+  let current = "";
+  const maxUnits = 13.2;
+  const maxLines = 2;
+
+  const pushLine = (line) => {
+    const cleaned = line.trim();
+    if (!cleaned) return;
+    lines.push(cleaned);
+    if (lines.length >= maxLines) {
+      chunks.push(lines);
+      lines = [];
+    }
+  };
+
+  for (const word of words) {
+    const candidate = `${current} ${word}`.trim();
+    if (!current || textWidthUnits(candidate) <= maxUnits) {
+      current = candidate;
+      continue;
+    }
+    pushLine(current);
+    current = word;
+  }
+  if (current) pushLine(current);
+  if (lines.length) chunks.push(lines);
+  return chunks;
+}
+
+function textWidthUnits(text) {
+  let total = 0;
+  for (const char of String(text || "")) {
+    if (/\s/.test(char)) total += 0.35;
+    else if (".,;:'!|ilI[]()".includes(char)) total += 0.32;
+    else if ("mwMW@#%&".includes(char)) total += 0.86;
+    else total += 0.58;
+  }
+  return total;
+}
+
+function formatHighlightedAssCaption(lines, activeWordIndex) {
+  let index = 0;
+  const formatted = lines.map((line) => {
+    const words = String(line || "").split(/\s+/).filter(Boolean);
+    return words.map((word) => {
+      const escaped = assEscape(word);
+      const active = index === activeWordIndex;
+      index += 1;
+      if (!active) return escaped;
+      return `{\\1c&H00FFFF&\\bord6}${escaped}{\\1c&HFFFFFF&\\bord5}`;
+    }).join(" ");
+  });
+  return `{\\1c&HFFFFFF&}${formatted.join("\\N")}`;
+}
+
+async function muxVideoAudioWithAss({ videoPath, audioPath, assPath, outputPath, totalDuration }) {
+  const subtitleFilter = `subtitles='${ffmpegFilterPath(assPath)}':fontsdir='${ffmpegFilterPath(scholarFontsDir)}'`;
+  await runFfmpeg([
+    "-y",
+    "-i",
+    videoPath,
+    "-i",
+    audioPath,
+    "-filter_complex",
+    `[0:v]${subtitleFilter},format=yuv420p[v];[1:a]apad=pad_dur=2[a]`,
+    "-map",
+    "[v]",
+    "-map",
+    "[a]",
+    "-t",
+    Number(totalDuration).toFixed(3),
+    "-c:v",
+    "libx264",
+    "-pix_fmt",
+    "yuv420p",
+    "-c:a",
+    "aac",
+    "-b:a",
+    "192k",
+    "-movflags",
+    "+faststart",
+    outputPath
+  ]);
+}
+
+function secondsToAss(seconds) {
+  const total = Math.max(0, Number(seconds) || 0);
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = Math.floor(total % 60);
+  const cs = Math.floor((total - Math.floor(total)) * 100);
+  return `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}.${String(cs).padStart(2, "0")}`;
+}
+
+function assEscape(text) {
+  return String(text || "")
+    .replace(/\\/g, "\\\\")
+    .replace(/\{/g, "\\{")
+    .replace(/\}/g, "\\}")
+    .replace(/\r?\n/g, "\\N");
+}
+
+function assStyleValue(text) {
+  return String(text || "Scholar").replace(/[\r\n,]+/g, " ").trim() || "Scholar";
+}
+
+function ffmpegFilterPath(filePath) {
+  return String(filePath || "")
+    .replace(/\\/g, "/")
+    .replace(/:/g, "\\:")
+    .replace(/'/g, "\\'");
+}
+
 async function makeFallbackAudio({ outputPath, duration, text }) {
   const narrationPath = outputPath.replace(/\.m4a$/i, "-narration.wav");
   const narrationTextPath = outputPath.replace(/\.m4a$/i, "-narration.txt");
@@ -298,21 +558,23 @@ async function makeFallbackAudio({ outputPath, duration, text }) {
   const fadeOutAt = Math.max(0.5, duration - 0.7).toFixed(2);
   const filter = hasNarration
     ? [
-        "[0:a]volume=2.25,aecho=0.65:0.35:70:0.2,highpass=f=85,lowpass=f=5400,dynaudnorm=f=120:g=12[n]",
-        "[1:a]volume=0.24,lowpass=f=80,aecho=0.6:0.25:900:0.18[a0]",
-        "[2:a]volume=0.12,lowpass=f=180,tremolo=f=0.22:d=0.85[a1]",
-        "[3:a]volume=0.065,aecho=0.45:0.25:760:0.18[a2]",
-        "[4:a]volume=0.16,highpass=f=70,lowpass=f=1350[a3]",
-        "[5:a]volume=0.055,highpass=f=1200,lowpass=f=3800,tremolo=f=8:d=0.72[a4]",
-        `[n][a0][a1][a2][a3][a4]amix=inputs=6:duration=longest:normalize=0,lowpass=f=6000,volume=1.08,alimiter=limit=0.95,afade=t=in:st=0:d=0.25,afade=t=out:st=${fadeOutAt}:d=0.65[a]`
+        "[0:a]volume=2.45,aecho=0.65:0.35:70:0.2,highpass=f=85,lowpass=f=5400,dynaudnorm=f=120:g=13[n]",
+        "[1:a]volume=0.34,lowpass=f=95,aecho=0.6:0.25:900:0.18[a0]",
+        "[2:a]volume=0.19,lowpass=f=230,tremolo=f=0.22:d=0.85[a1]",
+        "[3:a]volume=0.11,lowpass=f=460,tremolo=f=0.35:d=0.8,aecho=0.45:0.25:760:0.18[a2]",
+        "[4:a]volume=0.25,highpass=f=70,lowpass=f=1450[a3]",
+        "[5:a]volume=0.09,highpass=f=900,lowpass=f=3900,tremolo=f=8:d=0.72[a4]",
+        "[6:a]volume=0.15,highpass=f=160,lowpass=f=780,tremolo=f=0.42:d=0.88,aecho=0.55:0.28:1180:0.22[a5]",
+        `[n][a0][a1][a2][a3][a4][a5]amix=inputs=7:duration=longest:normalize=0,lowpass=f=6500,volume=1.1,alimiter=limit=0.95,afade=t=in:st=0:d=0.25,afade=t=out:st=${fadeOutAt}:d=0.65[a]`
       ].join(";")
     : [
-        "[0:a]volume=0.28,lowpass=f=80,aecho=0.6:0.25:900:0.18[a0]",
-        "[1:a]volume=0.14,lowpass=f=180,tremolo=f=0.22:d=0.85[a1]",
-        "[2:a]volume=0.07,aecho=0.45:0.25:760:0.18[a2]",
-        "[3:a]volume=0.18,highpass=f=70,lowpass=f=1350[a3]",
-        "[4:a]volume=0.065,highpass=f=1200,lowpass=f=3800,tremolo=f=8:d=0.72[a4]",
-        `[a0][a1][a2][a3][a4]amix=inputs=5:duration=longest:normalize=0,lowpass=f=3600,volume=1.35,alimiter=limit=0.95,afade=t=in:st=0:d=0.45,afade=t=out:st=${fadeOutAt}:d=0.65[a]`
+        "[0:a]volume=0.38,lowpass=f=95,aecho=0.6:0.25:900:0.18[a0]",
+        "[1:a]volume=0.22,lowpass=f=230,tremolo=f=0.22:d=0.85[a1]",
+        "[2:a]volume=0.13,lowpass=f=460,tremolo=f=0.35:d=0.8,aecho=0.45:0.25:760:0.18[a2]",
+        "[3:a]volume=0.28,highpass=f=70,lowpass=f=1450[a3]",
+        "[4:a]volume=0.1,highpass=f=900,lowpass=f=3900,tremolo=f=8:d=0.72[a4]",
+        "[5:a]volume=0.18,highpass=f=160,lowpass=f=780,tremolo=f=0.42:d=0.88,aecho=0.55:0.28:1180:0.22[a5]",
+        `[a0][a1][a2][a3][a4][a5]amix=inputs=6:duration=longest:normalize=0,lowpass=f=5200,volume=1.42,alimiter=limit=0.95,afade=t=in:st=0:d=0.45,afade=t=out:st=${fadeOutAt}:d=0.65[a]`
       ].join(";");
 
   const args = ["-y"];
@@ -348,6 +610,12 @@ async function makeFallbackAudio({ outputPath, duration, text }) {
     String(duration),
     "-i",
     "anoisesrc=color=white:amplitude=0.12:sample_rate=44100",
+    "-f",
+    "lavfi",
+    "-t",
+    String(duration),
+    "-i",
+    "sine=frequency=293:sample_rate=44100",
     "-filter_complex",
     filter,
     "-map",
@@ -374,13 +642,14 @@ async function makeFallbackAudio({ outputPath, duration, text }) {
 async function makeTtsHorrorMix({ inputPath, outputPath, duration }) {
   const fadeOutAt = Math.max(0.5, duration - 0.7).toFixed(2);
   const filter = [
-    "[0:a]volume=2.25,aecho=0.58:0.28:82:0.18,highpass=f=85,lowpass=f=5600,dynaudnorm=f=120:g=12[n]",
-    "[1:a]volume=0.22,lowpass=f=82,aecho=0.6:0.28:960:0.2[a0]",
-    "[2:a]volume=0.105,lowpass=f=180,tremolo=f=0.2:d=0.9[a1]",
-    "[3:a]volume=0.058,aecho=0.45:0.25:760:0.2[a2]",
-    "[4:a]volume=0.14,highpass=f=72,lowpass=f=1450[a3]",
-    "[5:a]volume=0.048,highpass=f=1200,lowpass=f=3900,tremolo=f=8.5:d=0.76[a4]",
-    `[n][a0][a1][a2][a3][a4]amix=inputs=6:duration=longest:normalize=0,lowpass=f=6500,volume=1.04,alimiter=limit=0.95,afade=t=in:st=0:d=0.2,afade=t=out:st=${fadeOutAt}:d=0.65[a]`
+    "[0:a]volume=2.6,aecho=0.58:0.28:82:0.18,highpass=f=85,lowpass=f=5600,dynaudnorm=f=120:g=13[n]",
+    "[1:a]volume=0.32,lowpass=f=95,aecho=0.6:0.28:960:0.2[a0]",
+    "[2:a]volume=0.18,lowpass=f=230,tremolo=f=0.2:d=0.9[a1]",
+    "[3:a]volume=0.105,lowpass=f=460,tremolo=f=0.34:d=0.82,aecho=0.45:0.25:760:0.2[a2]",
+    "[4:a]volume=0.24,highpass=f=72,lowpass=f=1450[a3]",
+    "[5:a]volume=0.085,highpass=f=900,lowpass=f=3900,tremolo=f=8.5:d=0.76[a4]",
+    "[6:a]volume=0.14,highpass=f=160,lowpass=f=780,tremolo=f=0.42:d=0.88,aecho=0.55:0.28:1180:0.22[a5]",
+    `[n][a0][a1][a2][a3][a4][a5]amix=inputs=7:duration=longest:normalize=0,lowpass=f=6800,volume=1.08,alimiter=limit=0.95,afade=t=in:st=0:d=0.2,afade=t=out:st=${fadeOutAt}:d=0.65[a]`
   ].join(";");
 
   await runFfmpeg([
@@ -417,6 +686,12 @@ async function makeTtsHorrorMix({ inputPath, outputPath, duration }) {
     String(duration),
     "-i",
     "anoisesrc=color=white:amplitude=0.1:sample_rate=44100",
+    "-f",
+    "lavfi",
+    "-t",
+    String(duration),
+    "-i",
+    "sine=frequency=293:sample_rate=44100",
     "-filter_complex",
     filter,
     "-map",
@@ -639,6 +914,33 @@ function runFfmpeg(args) {
     child.on("close", (code) => {
       if (code === 0) resolve();
       else reject(new Error(`ffmpeg gagal (${code}): ${stderr.slice(-1200)}`));
+    });
+  });
+}
+
+function probeMediaDuration(filePath) {
+  return new Promise((resolve) => {
+    const child = spawn("ffprobe", [
+      "-v",
+      "error",
+      "-show_entries",
+      "format=duration",
+      "-of",
+      "default=noprint_wrappers=1:nokey=1",
+      filePath
+    ], { windowsHide: true });
+    let stdout = "";
+    child.stdout.on("data", (chunk) => {
+      stdout += chunk.toString();
+    });
+    child.on("error", () => resolve(0));
+    child.on("close", (code) => {
+      if (code !== 0) {
+        resolve(0);
+        return;
+      }
+      const duration = Number(stdout.trim());
+      resolve(Number.isFinite(duration) ? duration : 0);
     });
   });
 }
