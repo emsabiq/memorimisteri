@@ -39,8 +39,8 @@ const jumpScareSfxNames = [
   "cartoon-music-game-sfx-dynamite-exploding-525380.mp3"
 ];
 const producerMusicVolume = Number.isFinite(Number(process.env.PRODUCER_MUSIC_VOLUME))
-  ? clamp(Number(process.env.PRODUCER_MUSIC_VOLUME), 0.025, 0.18)
-  : 0.075;
+  ? clamp(Number(process.env.PRODUCER_MUSIC_VOLUME), 0.04, 0.32)
+  : 0.16;
 
 export async function renderDraftVideo(story) {
   const workDir = path.join(paths.storyboardDir, story.id);
@@ -783,18 +783,18 @@ async function makeProducerMusicBed({ outputPath, duration, sourcePaths }) {
   for (const sourcePath of selected) args.push("-stream_loop", "-1", "-i", sourcePath);
 
   const filters = [];
-  filters.push(`[0:a]atrim=0:${total.toFixed(3)},asetpts=PTS-STARTPTS,volume=${producerMusicVolume.toFixed(3)},highpass=f=38,lowpass=f=5200,afade=t=in:st=0:d=1.1,afade=t=out:st=${fadeOutAt}:d=1.1[m0]`);
+  filters.push(`[0:a]atrim=0:${total.toFixed(3)},asetpts=PTS-STARTPTS,dynaudnorm=f=180:g=8,volume=${producerMusicVolume.toFixed(3)},highpass=f=38,lowpass=f=5200,afade=t=in:st=0:d=1.1,afade=t=out:st=${fadeOutAt}:d=1.1[m0]`);
   if (selected[1]) {
     const tensionLength = Math.max(1, total - tensionStart);
-    filters.push(`[1:a]atrim=0:${tensionLength.toFixed(3)},asetpts=PTS-STARTPTS,volume=${(producerMusicVolume * 0.72).toFixed(3)},highpass=f=45,lowpass=f=4800,afade=t=in:st=0:d=1.4,adelay=${Math.round(tensionStart * 1000)}:all=1[m1]`);
+    filters.push(`[1:a]atrim=0:${tensionLength.toFixed(3)},asetpts=PTS-STARTPTS,dynaudnorm=f=180:g=8,volume=${(producerMusicVolume * 0.78).toFixed(3)},highpass=f=45,lowpass=f=4800,afade=t=in:st=0:d=1.4,adelay=${Math.round(tensionStart * 1000)}:all=1[m1]`);
   }
   if (selected[2]) {
     const climaxLength = Math.max(1, total - climaxStart);
-    filters.push(`[2:a]atrim=0:${climaxLength.toFixed(3)},asetpts=PTS-STARTPTS,volume=${(producerMusicVolume * 0.78).toFixed(3)},highpass=f=52,lowpass=f=5600,afade=t=in:st=0:d=0.8,adelay=${Math.round(climaxStart * 1000)}:all=1[m2]`);
+    filters.push(`[2:a]atrim=0:${climaxLength.toFixed(3)},asetpts=PTS-STARTPTS,dynaudnorm=f=180:g=8,volume=${(producerMusicVolume * 0.86).toFixed(3)},highpass=f=52,lowpass=f=5600,afade=t=in:st=0:d=0.8,adelay=${Math.round(climaxStart * 1000)}:all=1[m2]`);
   }
 
   const labels = selected.map((_, index) => `[m${index}]`).join("");
-  filters.push(`${labels}amix=inputs=${selected.length}:duration=longest:normalize=0,lowpass=f=6200,alimiter=limit=0.55[a]`);
+  filters.push(`${labels}amix=inputs=${selected.length}:duration=longest:normalize=0,lowpass=f=6200,alimiter=limit=0.72[a]`);
 
   await runFfmpeg([
     ...args,
@@ -908,7 +908,7 @@ async function makeFallbackAudio({ outputPath, workDir, duration, text, narratio
         "[6:a]volume=0.19,highpass=f=160,lowpass=f=780,tremolo=f=0.42:d=0.88,aecho=0.55:0.28:1180:0.22[a5]",
         "[7:a]volume=0.18,highpass=f=105,lowpass=f=620,tremolo=f=0.12:d=0.92,aecho=0.62:0.32:1420:0.28[m0]",
         "[8:a]volume=0.075,highpass=f=240,lowpass=f=1300,tremolo=f=5.2:d=0.42,aecho=0.38:0.22:520:0.16[m1]",
-        "[9:a]volume=0.9,highpass=f=32,lowpass=f=4200,aecho=0.5:0.28:1180:0.18[music]",
+        "[9:a]volume=1.12,highpass=f=32,lowpass=f=4200,aecho=0.5:0.28:1180:0.18[music]",
         `[n][a0][a1][a2][a3][a4][a5][m0][m1][music]amix=inputs=10:duration=longest:normalize=0,lowpass=f=7200,volume=1.08,alimiter=limit=0.95,afade=t=in:st=0:d=0.25,afade=t=out:st=${fadeOutAt}:d=0.65[a]`
       ].join(";")
     : [
@@ -920,7 +920,7 @@ async function makeFallbackAudio({ outputPath, workDir, duration, text, narratio
         "[5:a]volume=0.23,highpass=f=160,lowpass=f=780,tremolo=f=0.42:d=0.88,aecho=0.55:0.28:1180:0.22[a5]",
         "[6:a]volume=0.2,highpass=f=105,lowpass=f=620,tremolo=f=0.12:d=0.92,aecho=0.62:0.32:1420:0.28[m0]",
         "[7:a]volume=0.085,highpass=f=240,lowpass=f=1300,tremolo=f=5.2:d=0.42,aecho=0.38:0.22:520:0.16[m1]",
-        "[8:a]volume=1.0,highpass=f=32,lowpass=f=4200,aecho=0.5:0.28:1180:0.18[music]",
+        "[8:a]volume=1.18,highpass=f=32,lowpass=f=4200,aecho=0.5:0.28:1180:0.18[music]",
         `[a0][a1][a2][a3][a4][a5][m0][m1][music]amix=inputs=9:duration=longest:normalize=0,lowpass=f=6200,volume=1.28,alimiter=limit=0.95,afade=t=in:st=0:d=0.45,afade=t=out:st=${fadeOutAt}:d=0.65[a]`
       ].join(";");
 
@@ -1023,7 +1023,7 @@ async function makeTtsHorrorMix({ inputPath, outputPath, workDir, duration, narr
     "[6:a]volume=0.1,highpass=f=160,lowpass=f=780,tremolo=f=0.42:d=0.88,aecho=0.55:0.28:1180:0.22[a5]",
     "[7:a]volume=0.1,highpass=f=105,lowpass=f=620,tremolo=f=0.12:d=0.92,aecho=0.62:0.32:1420:0.28[m0]",
     "[8:a]volume=0.045,highpass=f=240,lowpass=f=1300,tremolo=f=5.2:d=0.42,aecho=0.38:0.22:520:0.16[m1]",
-    "[9:a]volume=0.82,highpass=f=32,lowpass=f=4200,aecho=0.5:0.28:1180:0.18[music]",
+    "[9:a]volume=1.12,highpass=f=32,lowpass=f=4200,aecho=0.5:0.28:1180:0.18[music]",
     `[n][a0][a1][a2][a3][a4][a5][m0][m1][music]amix=inputs=10:duration=longest:normalize=0,lowpass=f=7400,volume=1.08,alimiter=limit=0.95,afade=t=in:st=0:d=0.2,afade=t=out:st=${fadeOutAt}:d=0.65[a]`
   ].join(";");
 

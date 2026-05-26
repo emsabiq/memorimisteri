@@ -26,6 +26,7 @@ const els = {
   episodeGrid: document.querySelector("#episodeGrid"),
   sceneCountBadge: document.querySelector("#sceneCountBadge"),
   sceneGrid: document.querySelector("#sceneGrid"),
+  flowSteps: document.querySelector("#flowSteps"),
   videoSlot: document.querySelector("#videoSlot"),
   fullGenerateBtn: document.querySelector("#fullGenerateBtn"),
   fullGenerateTopBtn: document.querySelector("#fullGenerateTopBtn"),
@@ -199,6 +200,7 @@ function renderCurrent() {
     els.episodeBadge.textContent = "0 part";
     els.episodeGrid.innerHTML = "";
     els.sceneGrid.innerHTML = "";
+    els.flowSteps.innerHTML = "";
     els.videoSlot.textContent = "Belum ada video";
     return;
   }
@@ -225,6 +227,7 @@ function renderCurrent() {
   els.ttsMetric.textContent = formatUsd(story.cost.ttsUsd);
   els.totalMetric.textContent = formatUsd(story.cost.totalUsd);
   els.sceneCountBadge.textContent = `${story.plan.scenes.length} scene${episodeLabel ? ` / ${episodeLabel}` : ""}`;
+  renderFlowSteps(story);
   renderEpisodeRoadmap(story);
 
   els.sceneGrid.innerHTML = story.plan.scenes.map((scene) => {
@@ -236,9 +239,17 @@ function renderCurrent() {
           <strong>${escapeHtml(scene.screenText)}</strong>
         </div>
         <div class="scene-body">
-          <small>${scene.durationSec}s / ${escapeHtml(scene.transition)} / ${escapeHtml(scene.effect)}</small>
+          <small>${scene.durationSec}s / ${escapeHtml(scene.screenText)}</small>
           <p>${escapeHtml(scene.narration)}</p>
-          <div class="prompt">${escapeHtml(scene.imagePrompt)}</div>
+          <details class="scene-more">
+            <summary>Detail scene</summary>
+            <div class="detail-grid">
+              <span>Transisi</span><strong>${escapeHtml(scene.transition)}</strong>
+              <span>Efek</span><strong>${escapeHtml(scene.effect)}</strong>
+              <span>Suara</span><strong>${escapeHtml(scene.soundDesign)}</strong>
+            </div>
+            <div class="prompt">${escapeHtml(scene.imagePrompt)}</div>
+          </details>
         </div>
       </article>
     `;
@@ -249,6 +260,26 @@ function renderCurrent() {
   } else {
     els.videoSlot.textContent = "Video draft belum dirender";
   }
+}
+
+function renderFlowSteps(story) {
+  const totalScenes = story.plan.scenes.length;
+  const imageCount = story.assets.images?.length || 0;
+  const hasAudio = Boolean(story.assets.audio?.url || story.assets.audio?.path);
+  const hasVideo = Boolean(story.assets.video?.url);
+  const steps = [
+    ["Draft", Boolean(story.plan?.scenes?.length), `${totalScenes} scene siap`],
+    ["Gambar", imageCount >= totalScenes, `${imageCount}/${totalScenes}`],
+    ["TTS", hasAudio, hasAudio ? "siap" : "belum"],
+    ["Render", hasVideo, hasVideo ? "video siap" : "belum"]
+  ];
+  els.flowSteps.innerHTML = steps.map(([label, done, meta], index) => `
+    <div class="flow-step ${done ? "done" : ""}">
+      <span>${index + 1}</span>
+      <strong>${label}</strong>
+      <small>${meta}</small>
+    </div>
+  `).join("");
 }
 
 function renderEpisodeRoadmap(story) {

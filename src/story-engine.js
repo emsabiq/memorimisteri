@@ -4,6 +4,14 @@ import { requestStoryJson } from "./openai.js";
 import { clamp, cleanText, createId, nowIso } from "./util.js";
 
 const transitions = ["fade gelap cepat", "zoom pelan", "flash putih singkat", "glitch halus", "cut hening"];
+const narrationStyleRules = [
+  "Narasi harus terasa seperti orang Indonesia sedang bercerita pelan di malam hari, bukan bahasa laporan.",
+  "Gunakan kalimat pendek, tegang, dan visual. Sisipkan jeda natural lewat koma, titik, atau elipsis secukupnya.",
+  "Boleh memakai gaya 'aku' kalau cocok dengan ide, atau third-person dekat kalau tokoh utama disebut; pilih satu dan konsisten.",
+  "Hindari kata-kata kaku seperti 'terdapat', 'melakukan observasi', 'memasuki area', 'terlihat jelas'. Pakai bahasa sehari-hari yang tetap sinematik.",
+  "Bangun rasa takut dari suara kecil, benda berubah tempat, napas tertahan, layar HP, pintu, jendela, sumur, dan hal yang hampir terlihat.",
+  "Setiap scene narration idealnya 1-2 kalimat saja, mudah dibaca TTS, dan langsung membawa penonton ke momen berikutnya."
+];
 
 const themes = {
   kos: ["lorong kos sempit", "pintu kamar setengah terbuka", "lampu neon berkedip", "bayangan di ujung lorong"],
@@ -210,7 +218,7 @@ function normalizeInput(input) {
     protagonistName: cleanText(input.protagonistName || "Andi", 40),
     protagonistProfile: cleanText(input.protagonistProfile || defaultCharacter, 360),
     theme: cleanText(input.theme || "kos", 40),
-    tone: cleanText(input.tone || "seram pelan dan realistis", 100),
+    tone: cleanText(input.tone || "seram pelan, natural, seperti cerita pengalaman pribadi yang makin lama makin tidak beres", 140),
     durationSec,
     sceneCount,
     totalParts,
@@ -254,12 +262,18 @@ function buildPrompt(input, memory) {
   return [
     "Buat rencana 1 video short sebagai bagian dari 1 episode cerita mistis vertikal bahasa Indonesia.",
     "Konten harus original, cinematic, tidak gore, tidak memakai figur publik nyata, dan cocok untuk YouTube Shorts, Facebook Reels, Instagram Reels.",
+    "Tulis sebagai storyteller horror. Jangan terdengar seperti sinopsis, berita, atau instruksi produksi.",
+    "Cerita harus membuat penonton merasa ada sesuatu yang salah sejak awal, lalu rasa takutnya naik pelan sampai ujung part.",
+    ...narrationStyleRules,
     "Kembalikan JSON valid saja dengan shape:",
     "{ title, logline, hook, ending, episode:{ title, totalParts, currentPart, partTitle, arcSummary, partOutline:[{ part, title, summary, cliffhanger }] }, scenes:[{ index, durationSec, narration, screenText, imagePrompt, transition, effect, soundDesign }] }",
     "Episode besar harus punya outline 10 part atau sesuai Total part. Script scenes hanya untuk Current part.",
     "Durasi video current part harus sekitar 1 menit dan tidak boleh lewat 60 detik.",
+    "Total narasi current part sekitar 105-135 kata agar TTS terdengar lega, tidak terburu-buru.",
+    "Hook harus langsung memancing rasa penasaran, tetapi narration scene 1 tetap mulai dari kejadian, bukan promosi.",
     "Jangan tulis kalimat seperti: bersambung, akan berlanjut, lanjut di part berikutnya, tunggu part berikutnya, atau summary penutup. Akhiri part dengan beat cerita natural.",
     "Setiap scene wajib punya momen visual berbeda, supaya gambar tidak kembar.",
+    "ScreenText harus pendek, seperti judul beat visual, bukan kalimat panjang.",
     `Tokoh utama hanya untuk kontinuitas saat skrip benar-benar butuh orang: ${input.protagonistProfile}.`,
     "Visual harus mengikuti skrip, bukan memaksa tokoh muncul. Kalau adegan berupa suara, benda, lorong, sumur, pintu, HP, sawah, refleksi, atau bayangan, imagePrompt harus berupa POV/objek/suasana tanpa wajah dan tanpa badan penuh.",
     "Jangan menambahkan sosok manusia, hantu berbentuk manusia, atau figur orang tambahan kecuali skrip eksplisit menyebut ada sosok terlihat. Kalau ada orang terlihat, gunakan hanya karakter yang disebut dalam skrip.",
@@ -419,9 +433,9 @@ function titleFromFocus(value) {
 function fallbackNarration(scene, input, index) {
   const focus = cleanText(scene.screenText || themeMotif(input.theme, index), 80).toLowerCase();
   const lines = [
-    `Cahaya senter menyapu ${focus}, dan suasana rumah terasa makin dingin.`,
-    `Di titik itu, ${focus} terlihat seperti menyimpan sesuatu yang sengaja ditinggalkan.`,
-    `Andi menahan napas saat ${focus} muncul dalam gelap, lebih jelas dari sebelumnya.`
+    `Aku mengarahkan senter ke ${focus}. Udara langsung dingin, seperti ada yang baru saja lewat di depanku.`,
+    `${focus} itu diam saja, tapi rasanya seperti sedang menunggu aku mendekat.`,
+    `${input.protagonistName} menahan napas. Dari arah ${focus}, terdengar suara kecil yang tidak mungkin berasal dari angin.`
   ];
   return lines[index % lines.length];
 }

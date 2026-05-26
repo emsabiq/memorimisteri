@@ -114,6 +114,30 @@ label {
   gap: 7px;
 }
 
+.collapsible-field {
+  border: 1px solid #342d29;
+  border-radius: 7px;
+  background: #0e0e0d;
+  padding: 0;
+}
+
+.collapsible-field summary,
+.scene-more summary {
+  cursor: pointer;
+  color: #e0c07f;
+  font-size: 12px;
+  list-style-position: inside;
+}
+
+.collapsible-field summary {
+  padding: 10px 12px;
+}
+
+.collapsible-field label {
+  border-top: 1px solid #342d29;
+  padding: 11px;
+}
+
 textarea,
 input,
 select {
@@ -356,6 +380,56 @@ button:not(:disabled):hover {
   padding: 7px 9px;
 }
 
+.flow-steps {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.flow-step {
+  border: 1px solid #3a312d;
+  border-radius: 7px;
+  background: #0e0e0d;
+  padding: 9px;
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr);
+  gap: 2px 8px;
+  align-items: center;
+}
+
+.flow-step span {
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  background: #241f1c;
+  color: var(--muted);
+  font-size: 11px;
+  grid-row: span 2;
+}
+
+.flow-step strong {
+  font-size: 13px;
+}
+
+.flow-step small {
+  color: var(--muted);
+  font-size: 11px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.flow-step.done {
+  border-color: rgba(111, 140, 105, 0.8);
+}
+
+.flow-step.done span {
+  background: rgba(111, 140, 105, 0.24);
+  color: #d7f2cf;
+}
+
 .video-slot {
   min-height: 280px;
   border: 1px dashed #463b35;
@@ -409,6 +483,10 @@ button:not(:disabled):hover {
 .part-card small {
   color: var(--muted);
   line-height: 1.35;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 .part-card.done {
@@ -471,6 +549,30 @@ button:not(:disabled):hover {
   border-top: 1px solid #302824;
 }
 
+.scene-more {
+  border-top: 1px solid #302824;
+  padding-top: 8px;
+}
+
+.detail-grid {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr);
+  gap: 6px 9px;
+  margin: 10px 0 8px;
+}
+
+.detail-grid span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.detail-grid strong {
+  color: #d8d0c8;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.35;
+}
+
 .toast {
   position: fixed;
   right: 22px;
@@ -524,6 +626,7 @@ button:not(:disabled):hover {
   }
 
   .metric-grid,
+  .flow-steps,
   .field-grid,
   .form-actions {
     grid-template-columns: 1fr;

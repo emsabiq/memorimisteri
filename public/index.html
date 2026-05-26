@@ -20,7 +20,7 @@
         <form id="storyForm" class="panel form-panel">
           <label>
             <span>Ide cerita</span>
-            <textarea name="idea" rows="7">Di rumah kosong dekat sawah, ada suara perempuan menyanyi dari sumur tua setiap malam Jumat. Saat direkam, yang muncul justru bayangan di jendela dan suara lain memanggil dari belakang.</textarea>
+            <textarea name="idea" rows="5">Di rumah kosong dekat sawah, ada suara perempuan menyanyi dari sumur tua setiap malam Jumat. Saat direkam, yang muncul justru bayangan di jendela dan suara lain memanggil dari belakang.</textarea>
           </label>
 
           <label>
@@ -39,10 +39,13 @@
             </label>
           </div>
 
-          <label>
-            <span>Rincian karakter</span>
-            <textarea name="protagonistProfile" rows="4">Andi, pria Indonesia 28 tahun, rambut hitam pendek sedikit berantakan, wajah lelah dan penasaran, jaket denim gelap di atas kaos hitam polos, celana cargo hitam, sneakers gelap usang, selalu membawa smartphone dan senter kecil</textarea>
-          </label>
+          <details class="collapsible-field">
+            <summary>Rincian karakter</summary>
+            <label>
+              <span>Profil konsisten</span>
+              <textarea name="protagonistProfile" rows="4">Andi, pria Indonesia 28 tahun, rambut hitam pendek sedikit berantakan, wajah lelah dan penasaran, jaket denim gelap di atas kaos hitam polos, celana cargo hitam, sneakers gelap usang, selalu membawa smartphone dan senter kecil</textarea>
+            </label>
+          </details>
 
           <div class="field-grid">
             <label>
@@ -165,6 +168,7 @@
               <span id="imageStatus">Gambar: belum dirender</span>
               <span id="audioStatus">Suara: belum dirender</span>
             </div>
+            <div id="flowSteps" class="flow-steps"></div>
             <div id="videoSlot" class="video-slot"></div>
           </section>
         </div>
