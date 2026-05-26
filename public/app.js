@@ -177,6 +177,8 @@ function renderCurrent() {
   els.imageStatus.textContent = `Gambar: ${story.assets.images?.length || 0}/${story.plan.scenes.length} scene`;
   els.audioStatus.textContent = story.assets.video?.audio === "tts"
     ? "Suara: TTS"
+    : story.assets.video?.audio === "local-voice-horror-bed"
+      ? "Suara: voice lokal + ambience"
     : story.assets.video?.audio === "fallback-horror-bed"
       ? "Suara: ambience horor"
       : story.assets.audio?.url
