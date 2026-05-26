@@ -377,6 +377,49 @@ button:not(:disabled):hover {
   padding: 18px;
 }
 
+.episode-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.part-card {
+  min-height: 128px;
+  background: #11100f;
+  border: 1px solid #352d29;
+  border-radius: 8px;
+  color: var(--text);
+  display: grid;
+  gap: 7px;
+  padding: 12px;
+  text-align: left;
+}
+
+.part-card span {
+  color: var(--amber);
+  font-size: 11px;
+  text-transform: uppercase;
+}
+
+.part-card strong {
+  line-height: 1.25;
+}
+
+.part-card small {
+  color: var(--muted);
+  line-height: 1.35;
+}
+
+.part-card.done {
+  border-color: rgba(111, 140, 105, 0.85);
+  background: linear-gradient(180deg, rgba(29, 44, 33, 0.9), #11100f);
+}
+
+.part-card.current {
+  border-color: rgba(201, 137, 50, 0.9);
+}
+
 .scene-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));

@@ -60,7 +60,7 @@ app.post("/api/stories/full", async (req, res, next) => {
     await saveStory(story);
 
     if (config.openai.apiKey) {
-      await ensureStoryImages(story, { warnings });
+      await ensureStoryImages(story, { warnings, strict: true });
       await ensureStoryAudio(story, { warnings });
     } else {
       warnings.push("OPENAI_API_KEY belum aktif, gambar dan suara memakai fallback lokal.");
@@ -103,9 +103,10 @@ app.post("/api/stories/:id/render", async (req, res, next) => {
     const story = await requireStory(req.params.id);
     const warnings = [];
     if (req.body?.ensureAssets !== false && config.openai.apiKey) {
-      await ensureStoryImages(story, { warnings });
+      await ensureStoryImages(story, { warnings, strict: true });
       await ensureStoryAudio(story, { warnings });
     }
+    assertFinalImages(story);
     await renderAndPersist(story);
     res.json({ story, warnings });
   } catch (error) {
@@ -157,10 +158,13 @@ async function ensureStoryImages(story, options = {}) {
   let failures = 0;
 
   for (const scene of story.plan.scenes.slice(0, limit)) {
-    if (images.some((item) => item.sceneIndex === scene.index)) continue;
+    const existing = images.find((item) => item.sceneIndex === scene.index);
+    if (existing && existing.source !== "local-fallback") continue;
     try {
-      const image = await generateSceneImage({ storyId: story.id, scene, size, quality });
-      images.push(image);
+      const image = await generateImageWithRetry({ story, scene, size, quality });
+      const index = images.findIndex((item) => item.sceneIndex === scene.index);
+      if (index >= 0) images.splice(index, 1, image);
+      else images.push(image);
       story.assets.images = sortImages(images);
       story.updatedAt = nowIso();
       await saveStory(story);
@@ -174,6 +178,46 @@ async function ensureStoryImages(story, options = {}) {
   }
 
   story.assets.images = sortImages(images);
+}
+
+async function generateImageWithRetry({ story, scene, size, quality }) {
+  try {
+    return await generateSceneImage({ storyId: story.id, scene, size, quality });
+  } catch (error) {
+    const safeScene = {
+      ...scene,
+      imagePrompt: safePromptForScene(story, scene)
+    };
+    const image = await generateSceneImage({ storyId: story.id, scene: safeScene, size, quality });
+    image.recoveredFrom = error.message;
+    return image;
+  }
+}
+
+function safePromptForScene(story, scene) {
+  const character = story.input?.protagonistProfile || "Andi, pria Indonesia muda memakai jaket denim gelap, kaos hitam, celana cargo hitam, membawa smartphone dan senter kecil";
+  const sceneIndex = Number(scene.index || 0);
+  const atmosphericShots = [
+    "wide atmospheric shot with no visible person, focus on the old Indonesian house, rice field mist, doorway, and negative space",
+    "object detail shot with no full person, focus on a phone screen, small flashlight beam, old door, cracked window, or well surface",
+    "POV flashlight shot, only a hand, phone, or small flashlight may appear, no face required",
+    "distant silhouette optional and small in frame, atmosphere and location remain the main subject"
+  ];
+  const characterShots = [
+    `safe medium shot of Andi near the location, ${character}`,
+    `distant safe silhouette of Andi with the same outfit and small flashlight, ${character}`
+  ];
+  const forceAtmospheric = [2, 4, 6].includes(sceneIndex);
+  const shot = !forceAtmospheric && sceneIndex % 3 === 2
+    ? characterShots[sceneIndex % characterShots.length]
+    : atmosphericShots[Number(scene.index || 0) % atmosphericShots.length];
+  return [
+    shot,
+    `scene mood: ${scene.screenText || story.title}`,
+    "old empty house near rice field, closed old well nearby only as background object, no person inside the well",
+    "moody blue-green night lighting, soft mist, visible main subject, readable silhouette, cinematic phone-screen composition",
+    "vertical 9:16, high detail, dark but not underexposed, no text, no logo, no celebrity, no gore, no injury, no trapped person, no drowning, no fall, no violence, no self-harm"
+  ].join(", ");
 }
 
 async function ensureStoryAudio(story, options = {}) {
@@ -191,6 +235,7 @@ async function ensureStoryAudio(story, options = {}) {
 }
 
 async function renderAndPersist(story) {
+  assertFinalImages(story);
   const rendered = await renderDraftVideo(story);
   story.assets.video = rendered.video;
   const images = [...(story.assets.images || [])];
@@ -207,4 +252,15 @@ async function renderAndPersist(story) {
 
 function sortImages(images) {
   return [...images].sort((a, b) => Number(a.sceneIndex || 0) - Number(b.sceneIndex || 0));
+}
+
+function assertFinalImages(story) {
+  if (!config.openai.apiKey) return;
+  const images = story.assets.images || [];
+  const fallback = images.filter((image) => image.source === "local-fallback");
+  if (images.length < story.plan.scenes.length || fallback.length) {
+    const error = new Error("Gambar belum lengkap/final. Generate gambar dulu sampai semua scene berhasil.");
+    error.status = 409;
+    throw error;
+  }
 }

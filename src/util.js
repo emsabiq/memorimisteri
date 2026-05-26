@@ -13,7 +13,11 @@ export function clamp(value, min, max) {
 }
 
 export function cleanText(value, max = 2000) {
-  return String(value || "").replace(/\s+/g, " ").trim().slice(0, max);
+  const text = String(value || "").replace(/\s+/g, " ").trim();
+  if (text.length <= max) return text;
+  const sliced = text.slice(0, max).trim();
+  const wordSafe = sliced.replace(/\s+\S*$/, "").trim();
+  return wordSafe || sliced;
 }
 
 export function slugify(value) {

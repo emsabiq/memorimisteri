@@ -13,6 +13,26 @@ const themes = {
   mimpi: ["kamar gelap", "jam digital 03:12", "cermin buram", "bayangan berdiri di belakang"]
 };
 
+const visualPromptSuffix = [
+  "vertical 9:16 cinematic Indonesian horror illustration",
+  "moody blue-green night lighting, soft mist, visible main subject, readable silhouette",
+  "high detail, phone-screen composition, dark but not underexposed",
+  "no text, no logo, no celebrity, no gore, no distorted hands"
+].join(", ");
+
+const defaultCharacter = "Andi, pria Indonesia 28 tahun, rambut hitam pendek sedikit berantakan, wajah lelah dan penasaran, jaket denim gelap di atas kaos hitam polos, celana cargo hitam, sneakers gelap usang, selalu membawa smartphone dan senter kecil";
+
+const shotDirections = [
+  "wide atmospheric establishing shot, no visible person, focus on the location, mist, light, and negative space",
+  "protagonist continuity shot, show the main character clearly with the same outfit and props",
+  "object detail shot, no full person, focus on the clue, phone screen, door, window, well surface, key, or moving object",
+  "POV flashlight shot from the protagonist, only hand, phone, or small flashlight may appear",
+  "distant silhouette or shadow shot, person optional and small in frame, atmosphere is the main subject",
+  "protagonist reaction shot, show the main character only if it serves the narration",
+  "environment threat shot, no visible face, focus on movement in the room, corridor, field, or reflection",
+  "final unsettling atmosphere shot, protagonist optional as a tiny silhouette, do not make it a portrait"
+];
+
 const fallbackTemplates = [
   {
     title: "Nyanyian dari Sumur Belakang",
@@ -182,14 +202,21 @@ export async function createStoryDraft(input, context = {}) {
 }
 
 function normalizeInput(input) {
-  const durationSec = clamp(Number(input.durationSec || 55), 50, 60);
-  const sceneCount = clamp(Number(input.sceneCount || 8), 7, 10);
+  const durationSec = clamp(Number(input.durationSec || 60), 45, 60);
+  const sceneCount = clamp(Number(input.sceneCount || 8), 6, 10);
+  const totalParts = clamp(Number(input.totalParts || 10), 6, 20);
+  const partNumber = clamp(Number(input.partNumber || 1), 1, totalParts);
   return {
-    idea: cleanText(input.idea || "Ada suara mengetuk pintu kos jam tiga pagi.", 1200),
+    idea: cleanText(input.idea || "Di rumah kosong dekat sawah, ada suara perempuan menyanyi dari sumur tua setiap malam Jumat.", 1200),
+    episodeTitle: cleanText(input.episodeTitle || "", 100),
+    protagonistName: cleanText(input.protagonistName || "Andi", 40),
+    protagonistProfile: cleanText(input.protagonistProfile || defaultCharacter, 360),
     theme: cleanText(input.theme || "kos", 40),
     tone: cleanText(input.tone || "seram pelan dan realistis", 100),
     durationSec,
     sceneCount,
+    totalParts,
+    partNumber,
     imageSize: cleanText(input.imageSize || config.openai.imageSize, 20),
     imageQuality: cleanText(input.imageQuality || config.openai.imageQuality, 20),
     language: "id"
@@ -200,6 +227,10 @@ function normalizeMemory(context) {
   const stories = Array.isArray(context.existingStories) ? context.existingStories : [];
   const recent = stories.slice(0, 30).map((story) => ({
     title: cleanText(story?.title || story?.plan?.title || "", 90),
+    episodeTitle: cleanText(story?.plan?.episode?.title || story?.input?.episodeTitle || "", 100),
+    partTitle: cleanText(story?.plan?.episode?.partTitle || "", 100),
+    partNumber: Number(story?.plan?.episode?.currentPart || story?.input?.partNumber || 0),
+    outline: story?.plan?.episode?.partOutline,
     logline: cleanText(story?.plan?.logline || story?.input?.idea || "", 180)
   })).filter((story) => story.title || story.logline);
   return {
@@ -209,6 +240,13 @@ function normalizeMemory(context) {
 }
 
 function buildPrompt(input, memory) {
+  const matchingEpisode = memory.recent.find((story) => normalizeKey(story.episodeTitle) === normalizeKey(input.episodeTitle));
+  const existingOutline = Array.isArray(matchingEpisode?.outline)
+    ? [
+        "Outline episode yang sudah ada, pakai ini sebagai kontinuitas:",
+        ...matchingEpisode.outline.map((part) => `Part ${part.part}: ${part.title} - ${part.summary || part.cliffhanger || ""}`)
+      ].join("\n")
+    : "";
   const avoid = memory.recent.length
     ? [
         "Jangan ulangi judul, lokasi utama, twist, atau pola cerita berikut:",
@@ -216,32 +254,55 @@ function buildPrompt(input, memory) {
       ].join("\n")
     : "Belum ada riwayat cerita, tetap buat plot yang spesifik dan tidak generik.";
   return [
-    "Buat rencana video cerita mistis vertikal bahasa Indonesia.",
+    "Buat rencana 1 video short sebagai bagian dari 1 episode cerita mistis vertikal bahasa Indonesia.",
     "Konten harus original, cinematic, tidak gore, tidak memakai figur publik nyata, dan cocok untuk YouTube Shorts, Facebook Reels, Instagram Reels.",
     "Kembalikan JSON valid saja dengan shape:",
-    "{ title, logline, hook, ending, scenes:[{ index, durationSec, narration, screenText, imagePrompt, transition, effect, soundDesign }] }",
-    "Durasi total harus 50 sampai 60 detik. Narasi harus cukup panjang untuk TTS, bukan hanya subtitle pendek.",
+    "{ title, logline, hook, ending, episode:{ title, totalParts, currentPart, partTitle, arcSummary, partOutline:[{ part, title, summary, cliffhanger }] }, scenes:[{ index, durationSec, narration, screenText, imagePrompt, transition, effect, soundDesign }] }",
+    "Episode besar harus punya outline 10 part atau sesuai Total part. Script scenes hanya untuk Current part.",
+    "Durasi video current part harus sekitar 1 menit dan tidak boleh lewat 60 detik.",
+    "Jangan tulis kalimat seperti: bersambung, akan berlanjut, lanjut di part berikutnya, tunggu part berikutnya, atau summary penutup. Akhiri part dengan beat cerita natural.",
     "Setiap scene wajib punya momen visual berbeda, supaya gambar tidak kembar.",
+    `Tokoh utama menjadi anchor kontinuitas cerita: ${input.protagonistProfile}.`,
+    "Jangan tampilkan tokoh utama di semua gambar. Campurkan character shot dengan establishing shot, object detail, POV senter/HP, bayangan, lorong, sawah, pintu, sumur, atau benda petunjuk.",
+    "Untuk video 8 scene, scene 2, 4, dan 6 wajib menjadi insert shot tanpa orang/tokoh: fokus lokasi, objek, cahaya, refleksi, pintu, sumur, HP, atau petunjuk visual.",
+    "Idealnya 40-60% scene menampilkan tokoh utama, sisanya visual suasana atau objek. Kalau tokoh utama muncul, imagePrompt wajib menyebut nama, umur, outfit, smartphone, dan senter kecil yang sama.",
+    "Untuk adegan sumur: tampilkan sosok di samping/dekat sumur atau refleksi aman di air; jangan tampilkan orang jatuh, tubuh terjebak, tenggelam, atau berada di dalam sumur.",
     `Ide: ${input.idea}`,
+    `Judul episode opsional: ${input.episodeTitle || "buatkan judul episode yang kuat"}`,
     `Tema: ${input.theme}`,
     `Tone: ${input.tone}`,
-    `Durasi total: ${input.durationSec} detik`,
+    `Durasi current part: ${input.durationSec} detik`,
     `Jumlah scene: ${input.sceneCount}`,
+    `Current part: ${input.partNumber}`,
+    `Total part episode: ${input.totalParts}`,
+    matchingEpisode ? `Episode ini sudah punya part sebelumnya. Pertahankan kontinuitas dunia, tokoh, dan misteri, tapi tulis hanya part ${input.partNumber}.` : "",
+    existingOutline,
     avoid,
-    "Setiap imagePrompt harus detail dan konsisten: vertical 9:16, Indonesian horror atmosphere, cinematic lighting, clear visible subject, not underexposed, no text in image, no real celebrity, no logo."
+    "Setiap imagePrompt harus detail dan konsisten dengan visual style ini:",
+    visualPromptSuffix
   ].join("\n");
 }
 
 function normalizePlan(plan, input, memory) {
   const fallback = fallbackPlan(input, memory);
-  const scenes = Array.isArray(plan?.scenes) && plan.scenes.length ? plan.scenes : fallback.scenes;
+  const scenes = Array.isArray(plan?.scenes) && plan.scenes.length ? [...plan.scenes] : [...fallback.scenes];
+  while (scenes.length < input.sceneCount) {
+    const fallbackScene = fallback.scenes[scenes.length % fallback.scenes.length];
+    scenes.push({
+      ...fallbackScene,
+      screenText: `${fallbackScene.screenText} ${Math.floor(scenes.length / fallback.scenes.length) + 2}`,
+      imagePrompt: `${fallbackScene.imagePrompt}, continuation beat ${scenes.length + 1}`
+    });
+  }
   const title = makeUniqueTitle(cleanText(plan?.title || fallback.title, 80), memory, input);
   const durations = distributeDurations(input.durationSec, Math.min(input.sceneCount, scenes.length));
+  const episode = normalizeEpisode(plan?.episode, fallback.episode, title, input);
   return {
     title,
-    logline: cleanText(plan?.logline || fallback.logline, 240),
-    hook: cleanText(plan?.hook || fallback.hook, 240),
-    ending: cleanText(plan?.ending || fallback.ending, 240),
+    logline: stripContinuationLanguage(cleanText(plan?.logline || fallback.logline, 240)),
+    hook: stripContinuationLanguage(cleanText(plan?.hook || fallback.hook, 240)),
+    ending: stripContinuationLanguage(cleanText(plan?.ending || fallback.ending, 240)),
+    episode,
     scenes: scenes.slice(0, input.sceneCount).map((scene, index) => normalizeScene({
       ...scene,
       durationSec: durations[index] || scene.durationSec
@@ -251,11 +312,12 @@ function normalizePlan(plan, input, memory) {
 
 function normalizeScene(scene, index, input) {
   const durationSec = clamp(Number(scene.durationSec || Math.round(input.durationSec / input.sceneCount)), 3, 15);
+  const screenText = stripContinuationLanguage(cleanText(scene.screenText || `Scene ${index + 1}`, 64));
   return {
     index: index + 1,
     durationSec,
-    narration: cleanText(scene.narration || `Malam itu, sesuatu terasa berbeda di ${input.theme}.`, 700),
-    screenText: cleanText(scene.screenText || `Scene ${index + 1}`, 50),
+    narration: stripContinuationLanguage(cleanText(scene.narration || fallbackNarration(scene, input, index), 700)),
+    screenText,
     imagePrompt: enhancePrompt(scene.imagePrompt || "", input, index),
     transition: cleanText(scene.transition || transitions[index % transitions.length], 80),
     effect: cleanText(scene.effect || "slow zoom, subtle film grain, dark vignette", 120),
@@ -265,13 +327,54 @@ function normalizeScene(scene, index, input) {
 
 function enhancePrompt(prompt, input, index) {
   const motif = themeMotif(input.theme, index);
-  const base = prompt || `${motif}, tense quiet horror scene`;
+  const requestedBase = prompt || `${motif}, tense quiet horror scene`;
+  const forceAtmospheric = shouldForceAtmosphericInsert(index) || avoidsVisibleCharacter(requestedBase);
+  const base = forceAtmospheric
+    ? `${motif}, atmospheric insert shot inspired by the scene mood, focus on location, object clue, light, shadow, reflection, phone glow, door, window, or well surface`
+    : requestedBase;
+  const direction = forceAtmospheric
+    ? "atmospheric or object-focused insert shot, no visible person, no face, no full body"
+    : chooseShotDirection(base, input, index);
+  const characterRule = forceAtmospheric
+    ? "no visible protagonist; imply the character only through flashlight beam, phone glow, footprints, open door, shadow, or object clue"
+    : `character continuity: if ${input.protagonistName} appears, use this exact profile: ${input.protagonistProfile}; otherwise keep the frame atmospheric or object-focused and do not force a person into the frame`;
   return [
     base,
-    "vertical 9:16 cinematic Indonesian horror illustration",
-    "realistic atmosphere, moody shadows, soft mist, high detail, clear visible subject, not underexposed",
-    "no text, no logo, no celebrity, no gore, no distorted hands"
+    `composition direction: ${direction}`,
+    characterRule,
+    "if a well appears, keep any human silhouette beside the well or reflected safely on water, never inside the well",
+    visualPromptSuffix
   ].join(", ");
+}
+
+function chooseShotDirection(base, input, index) {
+  const text = cleanText(base || "", 900).toLowerCase();
+  const name = cleanText(input.protagonistName || "Andi", 40).toLowerCase();
+  if (avoidsVisibleCharacter(text)) {
+    return "atmospheric or object-focused shot, no visible full person, focus on location, clue, light, shadow, or texture";
+  }
+  if (text.includes(name) || text.includes("tokoh utama") || text.includes("protagonist")) {
+    return "contextual character shot, keep the protagonist consistent but let the location and horror atmosphere dominate the frame";
+  }
+  return shotDirections[index % shotDirections.length];
+}
+
+function shouldForceAtmosphericInsert(index) {
+  return [2, 4, 6].includes(index + 1);
+}
+
+function avoidsVisibleCharacter(value) {
+  return /\b(tanpa tokoh|tanpa orang|tanpa manusia|no visible person|no person|no human|without person|without people)\b/i.test(String(value || ""));
+}
+
+function fallbackNarration(scene, input, index) {
+  const focus = cleanText(scene.screenText || themeMotif(input.theme, index), 80).toLowerCase();
+  const lines = [
+    `Cahaya senter menyapu ${focus}, dan suasana rumah terasa makin dingin.`,
+    `Di titik itu, ${focus} terlihat seperti menyimpan sesuatu yang sengaja ditinggalkan.`,
+    `Andi menahan napas saat ${focus} muncul dalam gelap, lebih jelas dari sebelumnya.`
+  ];
+  return lines[index % lines.length];
 }
 
 function fallbackPlan(input, memory = { titles: new Set() }) {
@@ -296,7 +399,60 @@ function fallbackPlan(input, memory = { titles: new Set() }) {
     logline: template.logline,
     hook: template.hook,
     ending: template.ending,
+    episode: buildFallbackEpisode(template, input),
     scenes
+  };
+}
+
+function normalizeEpisode(raw, fallback, title, input) {
+  const source = raw || {};
+  const partOutline = normalizePartOutline(source.partOutline || fallback?.partOutline, input);
+  return {
+    title: cleanText(input.episodeTitle || source.title || fallback?.title || title, 100),
+    totalParts: input.totalParts,
+    currentPart: input.partNumber,
+    partTitle: cleanText(source.partTitle || fallback?.partTitle || title, 100),
+    arcSummary: cleanText(source.arcSummary || fallback?.arcSummary || "Satu episode mistis panjang yang dibagi menjadi beberapa part short.", 420),
+    partOutline
+  };
+}
+
+function normalizePartOutline(outline, input) {
+  const list = Array.isArray(outline) ? outline : [];
+  const items = Array.from({ length: input.totalParts }, (_, index) => {
+    const item = list[index] || {};
+    const part = index + 1;
+    return {
+      part,
+      title: cleanText(item.title || `Part ${part}`, 80),
+      summary: cleanText(item.summary || `Peristiwa mistis meningkat di part ${part}.`, 220),
+      cliffhanger: stripContinuationLanguage(cleanText(item.cliffhanger || `Beat tegang untuk part ${part}.`, 180))
+    };
+  });
+  return items;
+}
+
+function buildFallbackEpisode(template, input) {
+  const title = input.episodeTitle || template.title;
+  const partOutline = Array.from({ length: input.totalParts }, (_, index) => {
+    const part = index + 1;
+    const isFinal = part === input.totalParts;
+    return {
+      part,
+      title: part === 1 ? `${template.title}: Awal Gangguan` : `${template.title}: Part ${part}`,
+      summary: isFinal
+        ? "Rahasia utama terbuka dan semua tanda dari part sebelumnya kembali dalam satu konfrontasi terakhir."
+        : `Gangguan dari objek utama semakin dekat, membuka petunjuk baru dan risiko yang lebih personal di part ${part}.`,
+      cliffhanger: isFinal ? "Akhir episode mengunci nasib tokoh utama." : `Beat tegang untuk part ${part}.`
+    };
+  });
+  return {
+    title,
+    totalParts: input.totalParts,
+    currentPart: input.partNumber,
+    partTitle: partOutline[input.partNumber - 1]?.title || template.title,
+    arcSummary: `${template.logline} Episode ini dibagi menjadi ${input.totalParts} part short dengan fokus misteri bertahap.`,
+    partOutline
   };
 }
 
@@ -334,6 +490,13 @@ function distributeDurations(totalSec, sceneCount) {
     remainder -= extra;
     return Number(((base + extra) / 10).toFixed(1));
   });
+}
+
+function stripContinuationLanguage(value) {
+  return cleanText(value || "", 900)
+    .replace(/\b(bersambung|akan berlanjut|lanjut di part berikutnya|tunggu part berikutnya|part berikutnya)\b[.!…]*/gi, "")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function themeMotif(theme, index) {

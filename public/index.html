@@ -20,7 +20,28 @@
         <form id="storyForm" class="panel form-panel">
           <label>
             <span>Ide cerita</span>
-            <textarea name="idea" rows="7">Ada suara mengetuk pintu kos jam tiga pagi, tapi dari celah bawah pintu tidak terlihat kaki siapa pun.</textarea>
+            <textarea name="idea" rows="7">Di rumah kosong dekat sawah, ada suara perempuan menyanyi dari sumur tua setiap malam Jumat. Saat direkam, yang muncul justru bayangan di jendela dan suara lain memanggil dari belakang.</textarea>
+          </label>
+
+          <label>
+            <span>Judul episode</span>
+            <input name="episodeTitle" value="Rumah Kosong di Pinggir Sawah">
+          </label>
+
+          <div class="field-grid">
+            <label>
+              <span>Karakter</span>
+              <input name="protagonistName" value="Andi">
+            </label>
+            <label>
+              <span>Total part</span>
+              <input name="totalParts" type="number" min="6" max="20" value="10">
+            </label>
+          </div>
+
+          <label>
+            <span>Rincian karakter</span>
+            <textarea name="protagonistProfile" rows="4">Andi, pria Indonesia 28 tahun, rambut hitam pendek sedikit berantakan, wajah lelah dan penasaran, jaket denim gelap di atas kaos hitam polos, celana cargo hitam, sneakers gelap usang, selalu membawa smartphone dan senter kecil</textarea>
           </label>
 
           <div class="field-grid">
@@ -29,7 +50,7 @@
               <select name="theme">
                 <option value="kos">Kos</option>
                 <option value="jalan">Jalan sepi</option>
-                <option value="rumah">Rumah kosong</option>
+                <option value="rumah" selected>Rumah kosong</option>
                 <option value="pendaki">Pendaki</option>
                 <option value="mimpi">Mimpi buruk</option>
               </select>
@@ -37,14 +58,16 @@
             <label>
               <span>Durasi</span>
               <select name="durationSec">
-                <option value="50">50 detik</option>
-                <option value="55" selected>55 detik</option>
-                <option value="60">60 detik</option>
+                <option value="60" selected>1 menit</option>
               </select>
             </label>
             <label>
+              <span>Part</span>
+              <input name="partNumber" type="number" min="1" max="20" value="1">
+            </label>
+            <label>
               <span>Scene</span>
-              <input name="sceneCount" type="number" min="4" max="14" value="8">
+              <input name="sceneCount" type="number" min="6" max="10" value="8">
             </label>
             <label>
               <span>Kualitas</span>
@@ -63,7 +86,7 @@
 
           <div class="form-actions">
             <button class="secondary" type="submit">Buat draft</button>
-            <button id="fullGenerateBtn" class="primary" type="button">Generate baru lengkap</button>
+            <button id="fullGenerateBtn" class="primary" type="button">Generate part lengkap</button>
           </div>
         </form>
 
@@ -95,7 +118,7 @@
             <h2 id="storyTitle">Belum ada draft</h2>
           </div>
           <div class="actions">
-            <button id="fullGenerateTopBtn" class="primary" type="button">Generate baru</button>
+            <button id="fullGenerateTopBtn" class="primary" type="button">Generate part baru</button>
             <button id="imageBtn" class="secondary" type="button">Gambar scene</button>
             <button id="ttsBtn" class="secondary" type="button">TTS</button>
             <button id="renderBtn" class="primary" type="button">Render video</button>
@@ -145,6 +168,14 @@
             <div id="videoSlot" class="video-slot"></div>
           </section>
         </div>
+
+        <section class="scene-section">
+          <div class="section-head">
+            <h2>Episode Roadmap</h2>
+            <span id="episodeBadge" class="pill">0 part</span>
+          </div>
+          <div id="episodeGrid" class="episode-grid"></div>
+        </section>
 
         <section class="scene-section">
           <div class="section-head">

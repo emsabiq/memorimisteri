@@ -30,12 +30,13 @@ export async function requestStoryJson(promptText) {
 
 export async function generateSceneImage({ storyId, scene, size, quality }) {
   assertOpenAi();
+  const prompt = sanitizeImagePrompt(scene.imagePrompt);
   const response = await fetch(`${apiBase}/images/generations`, {
     method: "POST",
     headers: headersJson(),
     body: JSON.stringify({
       model: config.openai.imageModel,
-      prompt: scene.imagePrompt,
+      prompt,
       size,
       quality,
       n: 1
@@ -63,7 +64,7 @@ export async function generateSceneImage({ storyId, scene, size, quality }) {
     sceneIndex: scene.index,
     path: outputPath,
     url: `/generated/images/${filename}`,
-    prompt: scene.imagePrompt
+    prompt
   };
 }
 
@@ -104,6 +105,19 @@ function headersJson() {
     Authorization: `Bearer ${config.openai.apiKey}`,
     "Content-Type": "application/json"
   };
+}
+
+function sanitizeImagePrompt(value) {
+  return String(value || "")
+    .replace(/person inside the well/gi, "person beside the old well")
+    .replace(/human inside the well/gi, "human silhouette beside the old well")
+    .replace(/body inside the well/gi, "shadow reflected on the well water")
+    .replace(/standing inside the well/gi, "standing beside the old well")
+    .replace(/in the well['’]s shadow/gi, "beside the well in soft shadow")
+    .replace(/from inside the well/gi, "from near the old well")
+    .replace(/figure in the well/gi, "distant figure beside the well")
+    .replace(/something that fell into the well/gi, "ripples moving across the well water")
+    .concat(", no injury, no trapped person, no drowning, no fall, no violence, no self-harm");
 }
 
 async function parseOpenAiResponse(response) {

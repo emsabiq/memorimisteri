@@ -22,6 +22,8 @@ const els = {
   totalMetric: document.querySelector("#totalMetric"),
   previewHook: document.querySelector("#previewHook"),
   previewText: document.querySelector("#previewText"),
+  episodeBadge: document.querySelector("#episodeBadge"),
+  episodeGrid: document.querySelector("#episodeGrid"),
   sceneCountBadge: document.querySelector("#sceneCountBadge"),
   sceneGrid: document.querySelector("#sceneGrid"),
   videoSlot: document.querySelector("#videoSlot"),
@@ -89,7 +91,7 @@ async function createStory(formData) {
 }
 
 async function createFullStory(formData) {
-  setBusy(true, "Generate lengkap: cerita, gambar, TTS, render");
+  setBusy(true, "Generate part lengkap: storyboard, gambar, TTS, render");
   try {
     const payload = Object.fromEntries(formData.entries());
     const data = await api("/api/stories/full", {
@@ -99,7 +101,7 @@ async function createFullStory(formData) {
     state.current = data.story;
     await loadStories();
     const warning = data.warnings?.length ? ` (${data.warnings.length} warning)` : "";
-    toast(`Video lengkap selesai${warning}.`);
+    toast(`Video part selesai${warning}.`);
   } catch (error) {
     toast(error.message);
   } finally {
@@ -179,8 +181,8 @@ function renderStoryList() {
   els.storyCount.textContent = String(state.stories.length);
   els.storyList.innerHTML = state.stories.map((story) => `
     <button type="button" data-id="${story.id}">
-      <strong>${escapeHtml(story.title)}</strong>
-      <span>${new Date(story.updatedAt || story.createdAt).toLocaleString("id-ID")}</span>
+      <strong>${escapeHtml(story.plan?.episode?.partTitle || story.title)}</strong>
+      <span>${escapeHtml(partLabel(story))} - ${new Date(story.updatedAt || story.createdAt).toLocaleString("id-ID")}</span>
     </button>
   `).join("");
   els.storyList.querySelectorAll("button").forEach((button) => {
@@ -194,14 +196,18 @@ function renderStoryList() {
 function renderCurrent() {
   const story = state.current;
   if (!story) {
+    els.episodeBadge.textContent = "0 part";
+    els.episodeGrid.innerHTML = "";
     els.sceneGrid.innerHTML = "";
     els.videoSlot.textContent = "Belum ada video";
     return;
   }
 
-  els.storyTitle.textContent = story.title;
+  const episode = story.plan.episode || {};
+  const episodeLabel = episode.currentPart ? `Part ${episode.currentPart}/${episode.totalParts}` : "";
+  els.storyTitle.textContent = episode.partTitle || story.title;
   els.sourceBadge.textContent = story.source === "openai" ? "OpenAI" : "Offline";
-  els.logline.textContent = story.plan.logline;
+  els.logline.textContent = [episode.title, episodeLabel, story.plan.logline].filter(Boolean).join(" - ");
   els.imageStatus.textContent = `Gambar: ${story.assets.images?.length || 0}/${story.plan.scenes.length} scene`;
   els.audioStatus.textContent = story.assets.video?.audio?.startsWith("tts")
     ? "Suara: TTS"
@@ -218,7 +224,8 @@ function renderCurrent() {
   els.imageMetric.textContent = formatUsd(story.cost.imageUsd);
   els.ttsMetric.textContent = formatUsd(story.cost.ttsUsd);
   els.totalMetric.textContent = formatUsd(story.cost.totalUsd);
-  els.sceneCountBadge.textContent = `${story.plan.scenes.length} scene`;
+  els.sceneCountBadge.textContent = `${story.plan.scenes.length} scene${episodeLabel ? ` / ${episodeLabel}` : ""}`;
+  renderEpisodeRoadmap(story);
 
   els.sceneGrid.innerHTML = story.plan.scenes.map((scene) => {
     const image = story.assets.images?.find((item) => item.sceneIndex === scene.index);
@@ -242,6 +249,64 @@ function renderCurrent() {
   } else {
     els.videoSlot.textContent = "Video draft belum dirender";
   }
+}
+
+function renderEpisodeRoadmap(story) {
+  const episode = story.plan.episode || {};
+  const outline = episode.partOutline || [];
+  els.episodeBadge.textContent = `${outline.length || episode.totalParts || 0} part`;
+  const done = completedParts(episode.title);
+  els.episodeGrid.innerHTML = outline.map((part) => {
+    const isDone = done.has(Number(part.part));
+    const isCurrent = Number(part.part) === Number(episode.currentPart);
+    return `
+      <button type="button" class="part-card ${isDone ? "done" : ""} ${isCurrent ? "current" : ""}" data-part="${part.part}">
+        <span>${isDone ? "Selesai" : isCurrent ? "Aktif" : "Siap"}</span>
+        <strong>Part ${part.part}: ${escapeHtml(part.title)}</strong>
+        <small>${escapeHtml(part.summary || part.cliffhanger || "")}</small>
+      </button>
+    `;
+  }).join("");
+  els.episodeGrid.querySelectorAll(".part-card").forEach((button) => {
+    button.addEventListener("click", () => selectPartForGeneration(story, button.dataset.part));
+  });
+}
+
+function completedParts(episodeTitle) {
+  const title = String(episodeTitle || "").toLowerCase();
+  return new Set(state.stories
+    .filter((story) => String(story.plan?.episode?.title || "").toLowerCase() === title)
+    .filter((story) => story.status === "rendered" && story.assets?.video?.url)
+    .map((story) => Number(story.plan?.episode?.currentPart))
+    .filter(Boolean));
+}
+
+function selectPartForGeneration(story, partNumber) {
+  const values = {
+    episodeTitle: story.plan?.episode?.title || story.input?.episodeTitle || "",
+    idea: story.input?.idea || "",
+    protagonistName: story.input?.protagonistName || "Andi",
+    protagonistProfile: story.input?.protagonistProfile || "",
+    theme: story.input?.theme || "rumah",
+    durationSec: "60",
+    partNumber: String(partNumber || 1),
+    totalParts: String(story.plan?.episode?.totalParts || story.input?.totalParts || 10),
+    sceneCount: String(story.input?.sceneCount || 8),
+    imageQuality: story.input?.imageQuality || "low",
+    tone: story.input?.tone || ""
+  };
+  Object.entries(values).forEach(([name, value]) => setFormValue(name, value));
+  toast(`Part ${partNumber} siap digenerate.`);
+}
+
+function setFormValue(name, value) {
+  const field = els.form.elements[name];
+  if (field) field.value = value;
+}
+
+function partLabel(story) {
+  const episode = story.plan?.episode || {};
+  return episode.currentPart ? `Part ${episode.currentPart}/${episode.totalParts}` : "Draft";
 }
 
 function renderButtons() {
