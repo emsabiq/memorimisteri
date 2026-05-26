@@ -1,0 +1,15 @@
+node_modules/
+npm-debug.log*
+
+.env
+*.env
+!.env.example
+
+data/stories.json
+generated/audio/
+generated/images/
+generated/videos/
+generated/storyboards/
+
+.DS_Store
+Thumbs.db

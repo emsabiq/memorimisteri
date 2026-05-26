@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="id">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Mistis Story Video Studio</title>
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <main class="app-shell">
+      <aside class="sidebar">
+        <div class="brand">
+          <span class="brand-mark"></span>
+          <div>
+            <h1>Mistis Studio</h1>
+            <p id="runtimeStatus">Memuat status</p>
+          </div>
+        </div>
+
+        <form id="storyForm" class="panel form-panel">
+          <label>
+            <span>Ide cerita</span>
+            <textarea name="idea" rows="7">Ada suara mengetuk pintu kos jam tiga pagi, tapi dari celah bawah pintu tidak terlihat kaki siapa pun.</textarea>
+          </label>
+
+          <div class="field-grid">
+            <label>
+              <span>Tema</span>
+              <select name="theme">
+                <option value="kos">Kos</option>
+                <option value="jalan">Jalan sepi</option>
+                <option value="rumah">Rumah kosong</option>
+                <option value="pendaki">Pendaki</option>
+                <option value="mimpi">Mimpi buruk</option>
+              </select>
+            </label>
+            <label>
+              <span>Durasi</span>
+              <select name="durationSec">
+                <option value="30">30 detik</option>
+                <option value="60" selected>60 detik</option>
+                <option value="90">90 detik</option>
+              </select>
+            </label>
+            <label>
+              <span>Scene</span>
+              <input name="sceneCount" type="number" min="4" max="14" value="8">
+            </label>
+            <label>
+              <span>Kualitas</span>
+              <select name="imageQuality">
+                <option value="low" selected>Low</option>
+                <option value="medium">Medium</option>
+                <option value="high">High</option>
+              </select>
+            </label>
+          </div>
+
+          <label>
+            <span>Gaya suara</span>
+            <input name="tone" value="seram pelan, realistis, seperti cerita pengalaman pribadi">
+          </label>
+
+          <button class="primary" type="submit">Buat draft</button>
+        </form>
+
+        <section class="panel compact">
+          <div class="section-head">
+            <h2>Produksi</h2>
+            <span id="publishStatus" class="pill">Disabled</span>
+          </div>
+          <div class="platforms">
+            <span>YouTube</span>
+            <span>Facebook</span>
+            <span>Instagram</span>
+          </div>
+        </section>
+
+        <section class="panel compact">
+          <div class="section-head">
+            <h2>Riwayat</h2>
+            <span id="storyCount" class="pill">0</span>
+          </div>
+          <div id="storyList" class="story-list"></div>
+        </section>
+      </aside>
+
+      <section class="workspace">
+        <div class="topbar">
+          <div>
+            <p class="eyebrow">Local horror generator</p>
+            <h2 id="storyTitle">Belum ada draft</h2>
+          </div>
+          <div class="actions">
+            <button id="imageBtn" class="secondary" type="button">Gambar scene</button>
+            <button id="ttsBtn" class="secondary" type="button">TTS</button>
+            <button id="renderBtn" class="primary" type="button">Render video</button>
+          </div>
+        </div>
+
+        <div class="metric-grid">
+          <div class="metric">
+            <span>Token</span>
+            <strong id="tokenMetric">0</strong>
+          </div>
+          <div class="metric">
+            <span>Gambar</span>
+            <strong id="imageMetric">$0.000</strong>
+          </div>
+          <div class="metric">
+            <span>TTS</span>
+            <strong id="ttsMetric">$0.000</strong>
+          </div>
+          <div class="metric">
+            <span>Total</span>
+            <strong id="totalMetric">$0.000</strong>
+          </div>
+        </div>
+
+        <div class="preview-grid">
+          <section class="phone-preview">
+            <div class="phone-frame">
+              <div class="film-layer"></div>
+              <div class="phone-copy">
+                <span id="previewHook">Kisah malam ini</span>
+                <strong id="previewText">Draft visual akan muncul di sini</strong>
+              </div>
+            </div>
+          </section>
+
+          <section class="story-panel">
+            <div class="section-head">
+              <h2>Story</h2>
+              <span id="sourceBadge" class="pill">Offline</span>
+            </div>
+            <p id="logline" class="logline">Isi ide cerita untuk membuat struktur video.</p>
+            <div id="videoSlot" class="video-slot"></div>
+          </section>
+        </div>
+
+        <section class="scene-section">
+          <div class="section-head">
+            <h2>Scenes</h2>
+            <span id="sceneCountBadge" class="pill">0 scene</span>
+          </div>
+          <div id="sceneGrid" class="scene-grid"></div>
+        </section>
+      </section>
+    </main>
+
+    <div id="toast" class="toast" role="status"></div>
+    <script src="/app.js" type="module"></script>
+  </body>
+</html>
