@@ -13,6 +13,9 @@ const scholarFontName = process.env.SUBTITLE_FONT_FAMILY || "Scholar";
 const scholarFontsDir = path.dirname(scholarRegularFont);
 const transitionDuration = 0.45;
 const endCardDuration = 2.4;
+const introFreezeDuration = Number.isFinite(Number(process.env.INTRO_FREEZE_SECONDS))
+  ? clamp(Number(process.env.INTRO_FREEZE_SECONDS), 0.3, 2)
+  : 0.8;
 const subtitleOffsetSeconds = Number.isFinite(Number(process.env.SUBTITLE_OFFSET_SECONDS))
   ? Number(process.env.SUBTITLE_OFFSET_SECONDS)
   : -0.08;
@@ -26,8 +29,8 @@ export async function renderDraftVideo(story) {
   const sourceAudioDuration = story.assets?.audio?.path ? await probeMediaDuration(story.assets.audio.path) : 0;
   const contentDuration = renderContentDuration(story, sourceAudioDuration);
   const captionScenes = buildRenderScenes(story, contentDuration);
-  const scenes = withEndCardHold(captionScenes);
-  const totalDuration = scenes.reduce((sum, scene) => sum + Math.max(1.5, Number(scene.durationSec || 4)), 0);
+  const scenes = [buildIntroCoverScene(story, captionScenes[0]), ...withEndCardHold(captionScenes)];
+  const totalDuration = scenes.reduce((sum, scene) => sum + effectiveSceneDuration(scene), 0);
 
   const segmentPaths = [];
   const fallbackImages = [];
@@ -56,7 +59,8 @@ export async function renderDraftVideo(story) {
     story,
     scenes: captionScenes,
     contentDuration,
-    totalDuration
+    totalDuration,
+    introDuration: introFreezeDuration
   });
   const filename = `${story.id}-${safeFilename(story.title)}.mp4`;
   const outputPath = path.join(paths.videoDir, filename);
@@ -65,12 +69,24 @@ export async function renderDraftVideo(story) {
   let audioKind;
   if (story.assets?.audio?.path) {
     const ttsMixPath = path.join(workDir, "tts-horror-mix.m4a");
-    await makeTtsHorrorMix({ inputPath: story.assets.audio.path, outputPath: ttsMixPath, duration: totalDuration });
+    await makeTtsHorrorMix({
+      inputPath: story.assets.audio.path,
+      outputPath: ttsMixPath,
+      workDir,
+      duration: totalDuration,
+      narrationDelay: introFreezeDuration
+    });
     audioPath = ttsMixPath;
-    audioKind = "tts-horror-backsong-mix";
+    audioKind = "tts-horror-dramatic-music-mix";
   } else {
     const narrationText = story.plan.scenes.map((scene) => scene.narration).join(" ");
-    const fallbackAudio = await makeFallbackAudio({ outputPath: fallbackAudioPath, duration: totalDuration, text: narrationText });
+    const fallbackAudio = await makeFallbackAudio({
+      outputPath: fallbackAudioPath,
+      workDir,
+      duration: totalDuration,
+      text: narrationText,
+      narrationDelay: introFreezeDuration
+    });
     audioPath = fallbackAudio.path;
     audioKind = fallbackAudio.kind;
   }
@@ -105,9 +121,26 @@ function buildRenderScenes(story, targetDuration) {
 
 function renderContentDuration(story, sourceAudioDuration) {
   const requestedDuration = clamp(Number(story.input?.durationSec || 60), 45, 60);
-  const requestedContentDuration = Math.max(8, requestedDuration - endCardDuration);
-  const narrationDuration = sourceAudioDuration > 0 ? Number((sourceAudioDuration + 0.25).toFixed(2)) : 0;
-  return Math.max(requestedContentDuration, narrationDuration);
+  if (sourceAudioDuration > 0) return Number(sourceAudioDuration.toFixed(2));
+  return Math.max(8, requestedDuration - introFreezeDuration - endCardDuration);
+}
+
+function buildIntroCoverScene(story, firstScene) {
+  const episode = story.plan.episode || {};
+  const sourceScene = firstScene || story.plan.scenes?.[0] || {};
+  return {
+    ...sourceScene,
+    index: 0,
+    kind: "cover",
+    durationSec: introFreezeDuration,
+    imageSourceSceneIndex: sourceScene.index || 1,
+    partLabel: partLabel(episode),
+    storyTitle: story.title,
+    screenText: story.title,
+    narration: "",
+    transition: "cover freeze",
+    effect: "still cover"
+  };
 }
 
 function withEndCardHold(scenes) {
@@ -118,6 +151,11 @@ function withEndCardHold(scenes) {
       durationSec: Number((Math.max(1.5, Number(scene.durationSec || 4)) + endCardDuration).toFixed(2))
     };
   });
+}
+
+function effectiveSceneDuration(scene) {
+  const minimum = scene?.kind === "cover" ? 0.3 : 1.5;
+  return Math.max(minimum, Number(scene?.durationSec || 4));
 }
 
 function headerLabel(episode) {
@@ -208,13 +246,17 @@ async function createMoodPpm(outputPath, scene) {
 async function writeSegmentTextFiles({ story, scene, workDir }) {
   const episode = story.plan.episode || {};
   const partText = scene.partLabel || partLabel(episode);
-  const titleText = scene.index === 1 ? (story.plan.episode?.title || scene.storyTitle || story.title) : scene.screenText;
+  const titleText = scene.kind === "cover"
+    ? (story.plan.episode?.title || scene.storyTitle || story.title)
+    : scene.index === 1
+      ? (story.plan.episode?.title || scene.storyTitle || story.title)
+      : scene.screenText;
   const files = {
     part: path.join(workDir, `scene-${scene.index}-part.txt`),
     title: path.join(workDir, `scene-${scene.index}-title.txt`)
   };
   await fs.writeFile(files.part, formatLines(partText, 34, 1) || "PART 1");
-  await fs.writeFile(files.title, formatLines(titleText, scene.index === 1 ? 20 : 24, 2) || story.title);
+  await fs.writeFile(files.title, formatLines(titleText, scene.kind === "cover" ? 18 : scene.index === 1 ? 20 : 24, 2) || story.title);
   return files;
 }
 
@@ -227,18 +269,14 @@ function ffmpegPath(filePath) {
 }
 
 async function makeSegment({ imagePath, textPaths, scene, segmentPath, isFirst, isLast }) {
-  const duration = Math.max(1.5, Number(scene.durationSec || 4));
+  const duration = effectiveSceneDuration(scene);
   const renderDuration = duration + (isLast ? 0 : transitionDuration);
   const regularFont = ffmpegPath(scholarRegularFont);
   const italicFont = ffmpegPath(scholarItalicFont);
   const partTextFile = ffmpegPath(textPaths.part);
   const titleTextFile = ffmpegPath(textPaths.title);
   const frameCount = Math.ceil(renderDuration * fps);
-  const overlays = [
-    "drawbox=x=0:y=0:w=iw:h=270:color=black@0.46:t=fill",
-    `drawtext=fontfile='${italicFont}':textfile='${partTextFile}':x=64:y=46:fontsize=34:fontcolor=0xe2c483:line_spacing=8`,
-    `drawtext=fontfile='${regularFont}':textfile='${titleTextFile}':x=64:y=105:fontsize=${scene.index === 1 ? 66 : 58}:fontcolor=0xf7f1e5:line_spacing=12:borderw=3:bordercolor=black@0.9`
-  ];
+  const overlays = segmentTextOverlays({ scene, regularFont, italicFont, partTextFile, titleTextFile });
   const zoomFilter = cameraMotionFilter(scene, frameCount);
   const vfParts = [
     `scale=${width}:${height}:force_original_aspect_ratio=increase`,
@@ -276,7 +314,27 @@ async function makeSegment({ imagePath, textPaths, scene, segmentPath, isFirst, 
   ]);
 }
 
+function segmentTextOverlays({ scene, regularFont, italicFont, partTextFile, titleTextFile }) {
+  if (scene.kind === "cover") {
+    return [
+      "drawbox=x=0:y=0:w=iw:h=ih:color=black@0.34:t=fill",
+      `drawtext=fontfile='${italicFont}':textfile='${partTextFile}':x=(w-text_w)/2:y=520:fontsize=42:fontcolor=0xe2c483:borderw=2:bordercolor=black@0.9`,
+      `drawtext=fontfile='${regularFont}':textfile='${titleTextFile}':x=(w-text_w)/2:y=(h-text_h)/2:fontsize=92:fontcolor=0xf7f1e5:line_spacing=14:borderw=5:bordercolor=black@0.94`,
+      "drawbox=x=118:y=1430:w=844:h=2:color=0xe2c483@0.72:t=fill"
+    ];
+  }
+
+  return [
+    "drawbox=x=0:y=0:w=iw:h=270:color=black@0.46:t=fill",
+    `drawtext=fontfile='${italicFont}':textfile='${partTextFile}':x=64:y=46:fontsize=34:fontcolor=0xe2c483:line_spacing=8`,
+    `drawtext=fontfile='${regularFont}':textfile='${titleTextFile}':x=64:y=105:fontsize=${scene.index === 1 ? 66 : 58}:fontcolor=0xf7f1e5:line_spacing=12:borderw=3:bordercolor=black@0.9`
+  ];
+}
+
 function cameraMotionFilter(scene, frameCount) {
+  if (scene.kind === "cover") {
+    return `zoompan=z='1.0':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=${frameCount}:s=${width}x${height}:fps=${fps}`;
+  }
   const text = `${scene.effect || ""} ${scene.transition || ""}`.toLowerCase();
   if (text.includes("out")) {
     return `zoompan=z='max(1.0\\,1.08-on*0.0011)':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=${frameCount}:s=${width}x${height}:fps=${fps}`;
@@ -307,10 +365,10 @@ async function combineSegmentsWithOverlayFade({ segmentPaths, scenes, outputPath
   }
 
   let currentPath = segmentPaths[0];
-  let currentDuration = Math.max(1.5, Number(scenes[0]?.durationSec || 4)) + transitionDuration;
+  let currentDuration = effectiveSceneDuration(scenes[0]) + transitionDuration;
   for (let index = 1; index < segmentPaths.length; index += 1) {
     const nextPath = segmentPaths[index];
-    const nextDuration = Math.max(1.5, Number(scenes[index]?.durationSec || 4)) + (index === segmentPaths.length - 1 ? 0 : transitionDuration);
+    const nextDuration = effectiveSceneDuration(scenes[index]) + (index === segmentPaths.length - 1 ? 0 : transitionDuration);
     const mergedPath = index === segmentPaths.length - 1
       ? outputPath
       : path.join(path.dirname(outputPath), `visual-transition-${index}.mp4`);
@@ -345,12 +403,13 @@ async function combineSegmentsWithOverlayFade({ segmentPaths, scenes, outputPath
   }
 }
 
-async function writeSubtitleAss({ outputPath, story, scenes, contentDuration, totalDuration }) {
+async function writeSubtitleAss({ outputPath, story, scenes, contentDuration, totalDuration, introDuration }) {
   const events = [];
-  let cursor = 0;
+  const subtitleBase = Math.max(0, Number(introDuration || 0));
+  let cursor = subtitleBase;
   for (const scene of scenes) {
-    const duration = Math.max(1.5, Number(scene.durationSec || 4));
-    const start = cursor + subtitleOffsetSeconds;
+    const duration = effectiveSceneDuration(scene);
+    const start = Math.max(subtitleBase, cursor + subtitleOffsetSeconds);
     const end = cursor + duration + subtitleOffsetSeconds;
     events.push(...captionEventsForCue(scene.narration, start, end));
     cursor += duration;
@@ -358,7 +417,7 @@ async function writeSubtitleAss({ outputPath, story, scenes, contentDuration, to
 
   events.push({
     layer: 3,
-    start: Math.max(0, contentDuration - 0.05),
+    start: Math.max(0, subtitleBase + contentDuration - 0.05),
     end: totalDuration,
     style: "EndCard",
     text: "{\\fad(180,520)}Bersambung..."
@@ -593,9 +652,65 @@ function ffmpegFilterPath(filePath) {
     .replace(/'/g, "\\'");
 }
 
-async function makeFallbackAudio({ outputPath, duration, text }) {
+async function makeHorrorMusicBed({ outputPath, duration }) {
+  const sampleRate = 44100;
+  const sampleCount = Math.max(1, Math.ceil(Number(duration || 1) * sampleRate));
+  const buffer = Buffer.alloc(44 + sampleCount * 2);
+  const roots = [43.65, 46.25, 49.0, 41.2];
+
+  buffer.write("RIFF", 0);
+  buffer.writeUInt32LE(36 + sampleCount * 2, 4);
+  buffer.write("WAVE", 8);
+  buffer.write("fmt ", 12);
+  buffer.writeUInt32LE(16, 16);
+  buffer.writeUInt16LE(1, 20);
+  buffer.writeUInt16LE(1, 22);
+  buffer.writeUInt32LE(sampleRate, 24);
+  buffer.writeUInt32LE(sampleRate * 2, 28);
+  buffer.writeUInt16LE(2, 32);
+  buffer.writeUInt16LE(16, 34);
+  buffer.write("data", 36);
+  buffer.writeUInt32LE(sampleCount * 2, 40);
+
+  for (let index = 0; index < sampleCount; index += 1) {
+    const t = index / sampleRate;
+    const total = sampleCount / sampleRate;
+    const fadeIn = Math.min(1, t / 1.2);
+    const fadeOut = Math.min(1, Math.max(0, (total - t) / 1.4));
+    const fade = fadeIn * fadeOut;
+    const root = roots[Math.floor(t / 7.5) % roots.length];
+    const tremolo = 0.62 + 0.38 * Math.sin(2 * Math.PI * 0.11 * t);
+    const drone =
+      0.32 * Math.sin(2 * Math.PI * root * t) +
+      0.22 * Math.sin(2 * Math.PI * root * 1.05946 * t) +
+      0.18 * Math.sin(2 * Math.PI * root * 2.01 * t) +
+      0.1 * Math.sin(2 * Math.PI * root * 3.03 * t);
+    const pad =
+      0.11 * Math.sin(2 * Math.PI * 146.83 * t + Math.sin(t * 0.37) * 0.7) +
+      0.08 * Math.sin(2 * Math.PI * 311.13 * t + Math.sin(t * 0.19) * 0.9);
+    const pulsePhase = t % 3.15;
+    const pulse = pulsePhase < 0.38
+      ? Math.sin(2 * Math.PI * (58 + pulsePhase * 28) * t) * Math.exp(-pulsePhase * 7.5)
+      : 0;
+    const stingPhase = t % 11.2;
+    const sting = stingPhase < 1.1
+      ? Math.sin(2 * Math.PI * (392 + stingPhase * 120) * t) * Math.exp(-stingPhase * 4.5)
+      : 0;
+    const noise = (Math.sin(t * 1297.13) * Math.sin(t * 313.71) * Math.sin(t * 771.9)) * 0.08;
+    const value = Math.tanh(((drone * tremolo) + pad + (pulse * 0.82) + (sting * 0.3) + noise) * 1.15) * fade * 0.72;
+    buffer.writeInt16LE(Math.max(-32767, Math.min(32767, Math.round(value * 32767))), 44 + index * 2);
+  }
+
+  await fs.writeFile(outputPath, buffer);
+  return outputPath;
+}
+
+async function makeFallbackAudio({ outputPath, workDir, duration, text, narrationDelay = 0 }) {
   const narrationPath = outputPath.replace(/\.m4a$/i, "-narration.wav");
   const narrationTextPath = outputPath.replace(/\.m4a$/i, "-narration.txt");
+  const musicPath = path.join(workDir || path.dirname(outputPath), "dramatic-horror-music.wav");
+  await makeHorrorMusicBed({ outputPath: musicPath, duration });
+  const delayMs = Math.max(0, Math.round(Number(narrationDelay || 0) * 1000));
   let hasNarration = false;
   try {
     await fs.writeFile(narrationTextPath, text, "utf8");
@@ -608,7 +723,7 @@ async function makeFallbackAudio({ outputPath, duration, text }) {
   const fadeOutAt = Math.max(0.5, duration - 0.7).toFixed(2);
   const filter = hasNarration
     ? [
-        "[0:a]volume=2.35,aecho=0.65:0.35:70:0.2,highpass=f=85,lowpass=f=5400,dynaudnorm=f=120:g=13[n]",
+        `[0:a]adelay=${delayMs}:all=1,volume=2.35,aecho=0.65:0.35:70:0.2,highpass=f=85,lowpass=f=5400,dynaudnorm=f=120:g=13[n]`,
         "[1:a]volume=0.42,lowpass=f=95,aecho=0.6:0.25:900:0.18[a0]",
         "[2:a]volume=0.25,lowpass=f=230,tremolo=f=0.22:d=0.85[a1]",
         "[3:a]volume=0.15,lowpass=f=460,tremolo=f=0.35:d=0.8,aecho=0.45:0.25:760:0.18[a2]",
@@ -617,7 +732,8 @@ async function makeFallbackAudio({ outputPath, duration, text }) {
         "[6:a]volume=0.19,highpass=f=160,lowpass=f=780,tremolo=f=0.42:d=0.88,aecho=0.55:0.28:1180:0.22[a5]",
         "[7:a]volume=0.18,highpass=f=105,lowpass=f=620,tremolo=f=0.12:d=0.92,aecho=0.62:0.32:1420:0.28[m0]",
         "[8:a]volume=0.075,highpass=f=240,lowpass=f=1300,tremolo=f=5.2:d=0.42,aecho=0.38:0.22:520:0.16[m1]",
-        `[n][a0][a1][a2][a3][a4][a5][m0][m1]amix=inputs=9:duration=longest:normalize=0,lowpass=f=6900,volume=1.08,alimiter=limit=0.95,afade=t=in:st=0:d=0.25,afade=t=out:st=${fadeOutAt}:d=0.65[a]`
+        "[9:a]volume=0.9,highpass=f=32,lowpass=f=4200,aecho=0.5:0.28:1180:0.18[music]",
+        `[n][a0][a1][a2][a3][a4][a5][m0][m1][music]amix=inputs=10:duration=longest:normalize=0,lowpass=f=7200,volume=1.08,alimiter=limit=0.95,afade=t=in:st=0:d=0.25,afade=t=out:st=${fadeOutAt}:d=0.65[a]`
       ].join(";")
     : [
         "[0:a]volume=0.46,lowpass=f=95,aecho=0.6:0.25:900:0.18[a0]",
@@ -628,7 +744,8 @@ async function makeFallbackAudio({ outputPath, duration, text }) {
         "[5:a]volume=0.23,highpass=f=160,lowpass=f=780,tremolo=f=0.42:d=0.88,aecho=0.55:0.28:1180:0.22[a5]",
         "[6:a]volume=0.2,highpass=f=105,lowpass=f=620,tremolo=f=0.12:d=0.92,aecho=0.62:0.32:1420:0.28[m0]",
         "[7:a]volume=0.085,highpass=f=240,lowpass=f=1300,tremolo=f=5.2:d=0.42,aecho=0.38:0.22:520:0.16[m1]",
-        `[a0][a1][a2][a3][a4][a5][m0][m1]amix=inputs=8:duration=longest:normalize=0,lowpass=f=5600,volume=1.36,alimiter=limit=0.95,afade=t=in:st=0:d=0.45,afade=t=out:st=${fadeOutAt}:d=0.65[a]`
+        "[8:a]volume=1.0,highpass=f=32,lowpass=f=4200,aecho=0.5:0.28:1180:0.18[music]",
+        `[a0][a1][a2][a3][a4][a5][m0][m1][music]amix=inputs=9:duration=longest:normalize=0,lowpass=f=6200,volume=1.28,alimiter=limit=0.95,afade=t=in:st=0:d=0.45,afade=t=out:st=${fadeOutAt}:d=0.65[a]`
       ].join(";");
 
   const args = ["-y"];
@@ -682,6 +799,8 @@ async function makeFallbackAudio({ outputPath, duration, text }) {
     String(duration),
     "-i",
     "sine=frequency=311:sample_rate=44100",
+    "-i",
+    musicPath,
     "-filter_complex",
     filter,
     "-map",
@@ -705,10 +824,13 @@ async function makeFallbackAudio({ outputPath, duration, text }) {
   };
 }
 
-async function makeTtsHorrorMix({ inputPath, outputPath, duration }) {
+async function makeTtsHorrorMix({ inputPath, outputPath, workDir, duration, narrationDelay = 0 }) {
+  const musicPath = path.join(workDir || path.dirname(outputPath), "dramatic-horror-music.wav");
+  await makeHorrorMusicBed({ outputPath: musicPath, duration });
+  const delayMs = Math.max(0, Math.round(Number(narrationDelay || 0) * 1000));
   const fadeOutAt = Math.max(0.5, duration - 0.7).toFixed(2);
   const filter = [
-    "[0:a]volume=2.35,aecho=0.58:0.28:82:0.18,highpass=f=85,lowpass=f=5600,dynaudnorm=f=120:g=13[n]",
+    `[0:a]adelay=${delayMs}:all=1,volume=2.3,aecho=0.58:0.28:82:0.18,highpass=f=85,lowpass=f=5600,dynaudnorm=f=120:g=13[n]`,
     "[1:a]volume=0.4,lowpass=f=95,aecho=0.6:0.28:960:0.2[a0]",
     "[2:a]volume=0.25,lowpass=f=230,tremolo=f=0.2:d=0.9[a1]",
     "[3:a]volume=0.15,lowpass=f=460,tremolo=f=0.34:d=0.82,aecho=0.45:0.25:760:0.2[a2]",
@@ -717,7 +839,8 @@ async function makeTtsHorrorMix({ inputPath, outputPath, duration }) {
     "[6:a]volume=0.19,highpass=f=160,lowpass=f=780,tremolo=f=0.42:d=0.88,aecho=0.55:0.28:1180:0.22[a5]",
     "[7:a]volume=0.18,highpass=f=105,lowpass=f=620,tremolo=f=0.12:d=0.92,aecho=0.62:0.32:1420:0.28[m0]",
     "[8:a]volume=0.075,highpass=f=240,lowpass=f=1300,tremolo=f=5.2:d=0.42,aecho=0.38:0.22:520:0.16[m1]",
-    `[n][a0][a1][a2][a3][a4][a5][m0][m1]amix=inputs=9:duration=longest:normalize=0,lowpass=f=7200,volume=1.08,alimiter=limit=0.95,afade=t=in:st=0:d=0.2,afade=t=out:st=${fadeOutAt}:d=0.65[a]`
+    "[9:a]volume=0.95,highpass=f=32,lowpass=f=4200,aecho=0.5:0.28:1180:0.18[music]",
+    `[n][a0][a1][a2][a3][a4][a5][m0][m1][music]amix=inputs=10:duration=longest:normalize=0,lowpass=f=7400,volume=1.08,alimiter=limit=0.95,afade=t=in:st=0:d=0.2,afade=t=out:st=${fadeOutAt}:d=0.65[a]`
   ].join(";");
 
   await runFfmpeg([
@@ -772,6 +895,8 @@ async function makeTtsHorrorMix({ inputPath, outputPath, duration }) {
     String(duration),
     "-i",
     "sine=frequency=311:sample_rate=44100",
+    "-i",
+    musicPath,
     "-filter_complex",
     filter,
     "-map",
