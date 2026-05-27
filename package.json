@@ -7,7 +7,7 @@
   "scripts": {
     "dev": "node src/server.js",
     "start": "node src/server.js",
-    "check": "node --check src/server.js && node --check src/story-engine.js && node --check src/render.js && node --check src/openai.js",
+    "check": "node --check src/server.js && node --check src/story-engine.js && node --check src/render.js && node --check src/openai.js && node --check src/elevenlabs.js",
     "status": "node src/status.js"
   },
   "dependencies": {

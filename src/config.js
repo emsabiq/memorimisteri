@@ -51,13 +51,19 @@ export const config = {
     imageSize: clean(process.env.IMAGE_SIZE || "1024x1536"),
     imageQuality: clean(process.env.IMAGE_QUALITY || "low"),
     ttsModel: clean(process.env.TTS_MODEL || "gpt-4o-mini-tts"),
-    ttsVoice: clean(process.env.TTS_VOICE || "onyx"),
+    ttsVoice: clean(process.env.TTS_VOICE || "shimmer"),
     ttsEffectsEnabled: boolEnv("TTS_EFFECTS_ENABLED", true)
+  },
+  elevenlabs: {
+    apiKey: process.env.ELEVENLABS_API_KEY || "",
+    model: clean(process.env.ELEVENLABS_MODEL || "eleven_multilingual_v2"),
+    voiceId: clean(process.env.ELEVENLABS_VOICE_ID || "pFZP5JQG7iQjIQuC4Bku")
   },
   pricing: {
     storyInputUsdPer1MTokens: numberEnv("STORY_INPUT_USD_PER_1M_TOKENS", 0.4),
     storyOutputUsdPer1MTokens: numberEnv("STORY_OUTPUT_USD_PER_1M_TOKENS", 1.6),
-    ttsUsdPer1MChars: numberEnv("TTS_USD_PER_1M_CHARS", 15)
+    ttsUsdPer1MChars: numberEnv("TTS_USD_PER_1M_CHARS", 15),
+    elevenlabsTtsUsdPer1KChars: numberEnv("ELEVENLABS_TTS_USD_PER_1K_CHARS", 0.1)
   },
   automation: {
     enabled: boolEnv("AUTOMATION_ENABLED", false),
@@ -85,7 +91,9 @@ export function publicConfig() {
       imageSize: config.openai.imageSize,
       imageQuality: config.openai.imageQuality,
       ttsModel: config.openai.ttsModel,
-      ttsVoice: config.openai.ttsVoice
+      ttsVoice: config.openai.ttsVoice,
+      elevenlabs: Boolean(config.elevenlabs.apiKey),
+      elevenlabsModel: config.elevenlabs.model
     },
     automation: config.automation,
     ftp: {

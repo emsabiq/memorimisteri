@@ -2,6 +2,7 @@ import express from "express";
 import { spawnSync } from "node:child_process";
 import { config, ensureProjectDirs, paths, publicConfig } from "./config.js";
 import { createStoryDraft } from "./story-engine.js";
+import { generateElevenLabsSpeech } from "./elevenlabs.js";
 import { generateSceneImage, generateSpeech } from "./openai.js";
 import { getStory, listStories, saveStory } from "./storage.js";
 import { renderDraftVideo } from "./render.js";
@@ -89,7 +90,7 @@ app.post("/api/stories/:id/images", async (req, res, next) => {
 app.post("/api/stories/:id/tts", async (req, res, next) => {
   try {
     const story = await requireStory(req.params.id);
-    await ensureStoryAudio(story, { force: true });
+    await ensureStoryAudio(story, { force: true, provider: req.body?.provider });
     story.updatedAt = nowIso();
     await saveStory(story);
     res.json({ story });
@@ -104,7 +105,7 @@ app.post("/api/stories/:id/render", async (req, res, next) => {
     const warnings = [];
     if (req.body?.ensureAssets !== false && config.openai.apiKey) {
       await ensureStoryImages(story, { warnings, strict: true });
-      await ensureStoryAudio(story, { warnings });
+      await ensureStoryAudio(story, { warnings, provider: req.body?.provider });
     }
     assertFinalImages(story);
     await renderAndPersist(story);
@@ -216,16 +217,29 @@ function safePromptForScene(story, scene) {
 
 async function ensureStoryAudio(story, options = {}) {
   const warnings = options.warnings || [];
-  if (story.assets.audio?.path && !options.force) return;
+  const provider = String(options.provider || "openai").toLowerCase();
+  if (story.assets.audio?.path && !options.force && String(story.assets.audio.provider || "openai").toLowerCase() === provider) return;
   try {
-    const text = story.plan.scenes.map((scene) => scene.narration).join("\n\n");
-    story.assets.audio = await generateSpeech({ storyId: story.id, text });
+    const text = narrationTextForTts(story);
+    story.assets.audio = provider === "elevenlabs"
+      ? await generateElevenLabsSpeech({ storyId: story.id, text, filenameSuffix: "elevenlabs-female-horror" })
+      : await generateSpeech({ storyId: story.id, text, voice: "shimmer", filenameSuffix: "openai-female-horror" });
+    story.assets.audio.characters = text.length;
     story.updatedAt = nowIso();
     await saveStory(story);
   } catch (error) {
     if (options.strict) throw error;
     warnings.push(`TTS gagal: ${error.message}`);
   }
+}
+
+function narrationTextForTts(story) {
+  return story.plan.scenes
+    .map((scene) => String(scene.narration || "").trim())
+    .filter(Boolean)
+    .join(" ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 async function renderAndPersist(story) {

@@ -68,10 +68,10 @@ export async function generateSceneImage({ storyId, scene, size, quality }) {
   };
 }
 
-export async function generateSpeech({ storyId, text }) {
+export async function generateSpeech({ storyId, text, voice, filenameSuffix = "openai" }) {
   assertOpenAi();
   await fs.mkdir(paths.audioDir, { recursive: true });
-  const filename = `${storyId}-narration.mp3`;
+  const filename = `${storyId}-${safeFilename(filenameSuffix)}-narration.mp3`;
   const outputPath = path.join(paths.audioDir, filename);
 
   const response = await fetch(`${apiBase}/audio/speech`, {
@@ -79,9 +79,9 @@ export async function generateSpeech({ storyId, text }) {
     headers: headersJson(),
     body: JSON.stringify({
       model: config.openai.ttsModel,
-      voice: config.openai.ttsVoice,
+      voice: voice || config.openai.ttsVoice,
       input: text,
-      instructions: "Bacakan sepenuhnya dalam Bahasa Indonesia dengan pelafalan Indonesia natural. Suaranya dekat, pelan, dan tegang, seperti orang Indonesia sedang live story telling pengalaman mistis sungguhan kepada teman di ruangan gelap. Jangan seperti membaca naskah; beri jeda napas natural, sedikit ragu di bagian menakutkan, dan bisikkan kalimat yang terasa paling dekat. Tetap jelas, tidak berlebihan, dan bukan gaya iklan.",
+      instructions: "Bacakan sepenuhnya dalam Bahasa Indonesia dengan pelafalan Indonesia natural. Suaranya perempuan, dekat, pelan, dan tegang, seperti orang Indonesia sedang live story telling pengalaman mistis sungguhan kepada teman di ruangan gelap. Jangan terdengar membaca potongan scene; baca sebagai satu cerita sambung dengan napas natural, sedikit ragu di bagian menakutkan, dan bisikkan kalimat yang terasa paling dekat. Tetap jelas, tidak berlebihan, dan bukan gaya iklan.",
       response_format: "mp3"
     })
   });
@@ -91,6 +91,9 @@ export async function generateSpeech({ storyId, text }) {
   }
   await fs.writeFile(outputPath, Buffer.from(await response.arrayBuffer()));
   return {
+    provider: "openai",
+    model: config.openai.ttsModel,
+    voice: voice || config.openai.ttsVoice,
     path: outputPath,
     url: `/generated/audio/${filename}`
   };
