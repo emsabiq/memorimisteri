@@ -16,7 +16,7 @@ export async function requestStoryJson(promptText) {
       messages: [
         {
           role: "system",
-          content: "You are an Indonesian horror short-form video writer. Write natural, frightening Indonesian narration that sounds spoken, cinematic, and specific. Return valid JSON only."
+          content: "You are an Indonesian horror short-form video writer. Write first-person, live storytelling narration that sounds like a real Indonesian person quietly telling a frightening experience, cinematic but not stiff. Return valid JSON only."
         },
         { role: "user", content: promptText }
       ],
@@ -81,7 +81,7 @@ export async function generateSpeech({ storyId, text }) {
       model: config.openai.ttsModel,
       voice: config.openai.ttsVoice,
       input: text,
-      instructions: "Bacakan sepenuhnya dalam Bahasa Indonesia dengan pelafalan Indonesia natural. Suaranya dekat, pelan, dan tegang, seperti orang Indonesia sedang menceritakan pengalaman mistis sungguhan kepada teman di ruangan gelap. Beri jeda di titik dan koma, bisikkan bagian yang menakutkan, tetapi jangan berlebihan atau seperti iklan.",
+      instructions: "Bacakan sepenuhnya dalam Bahasa Indonesia dengan pelafalan Indonesia natural. Suaranya dekat, pelan, dan tegang, seperti orang Indonesia sedang live story telling pengalaman mistis sungguhan kepada teman di ruangan gelap. Jangan seperti membaca naskah; beri jeda napas natural, sedikit ragu di bagian menakutkan, dan bisikkan kalimat yang terasa paling dekat. Tetap jelas, tidak berlebihan, dan bukan gaya iklan.",
       response_format: "mp3"
     })
   });

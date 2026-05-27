@@ -5,12 +5,15 @@ import { clamp, cleanText, createId, nowIso } from "./util.js";
 
 const transitions = ["fade gelap cepat", "zoom pelan", "flash putih singkat", "glitch halus", "cut hening"];
 const narrationStyleRules = [
-  "Narasi harus terasa seperti orang Indonesia sedang bercerita pelan di malam hari, bukan bahasa laporan.",
+  "Narasi harus terasa seperti orang Indonesia sedang live story telling atau mengirim voice note tengah malam, bukan bahasa laporan.",
+  "Default pakai sudut pandang aku kalau ide cocok. Narator boleh terdengar ragu, menahan napas, mencoba menenangkan diri, lalu makin takut.",
   "Gunakan kalimat pendek, tegang, dan visual. Sisipkan jeda natural lewat koma, titik, atau elipsis secukupnya.",
-  "Boleh memakai gaya 'aku' kalau cocok dengan ide, atau third-person dekat kalau tokoh utama disebut; pilih satu dan konsisten.",
+  "Pakai bahasa sehari-hari yang tetap rapi: 'waktu itu', 'aku kira', 'jujur', 'anehnya', 'di situ aku mulai ngerasa'. Jangan terlalu gaul.",
+  "Jangan terlalu sering menyebut nama tokoh. Kalau sudah pakai aku, lanjutkan sebagai aku sampai selesai.",
   "Hindari kata-kata kaku seperti 'terdapat', 'melakukan observasi', 'memasuki area', 'terlihat jelas'. Pakai bahasa sehari-hari yang tetap sinematik.",
+  "Hindari kalimat sinopsis seperti 'Andi mulai menyelidiki' atau 'misteri semakin dalam'. Ubah menjadi kejadian langsung yang sedang dialami.",
   "Jangan pernah membacakan biodata, umur, ciri fisik, atau outfit tokoh di narration. Cukup sebut aksi dan tempat, misalnya: 'Andi berdiri di depan sumur tua.'",
-  "Bangun rasa takut dari suara kecil, benda berubah tempat, napas tertahan, layar HP, pintu, jendela, sumur, dan hal yang hampir terlihat.",
+  "Bangun rasa takut dari hal kecil yang manusiawi: suara sandal di tanah, layar HP yang meredup, bau tanah basah, jendela bergerak, napas yang tiba-tiba terdengar bukan milik narator.",
   "Setiap scene narration idealnya 1-2 kalimat saja, mudah dibaca TTS, dan langsung membawa penonton ke momen berikutnya."
 ];
 
@@ -263,15 +266,17 @@ function buildPrompt(input, memory) {
   return [
     "Buat rencana 1 video short sebagai bagian dari 1 episode cerita mistis vertikal bahasa Indonesia.",
     "Konten harus original, cinematic, tidak gore, tidak memakai figur publik nyata, dan cocok untuk YouTube Shorts, Facebook Reels, Instagram Reels.",
-    "Tulis sebagai storyteller horror. Jangan terdengar seperti sinopsis, berita, atau instruksi produksi.",
+    "Tulis sebagai storyteller horror yang sedang menceritakan pengalaman pribadi secara live. Jangan terdengar seperti sinopsis, berita, atau instruksi produksi.",
+    "Bayangkan naratornya manusia biasa yang takut tapi mencoba tetap bicara pelan ke penonton. Narasi harus punya rasa hadir di lokasi.",
     "Cerita harus membuat penonton merasa ada sesuatu yang salah sejak awal, lalu rasa takutnya naik pelan sampai ujung part.",
     ...narrationStyleRules,
     "Kembalikan JSON valid saja dengan shape:",
     "{ title, logline, hook, ending, episode:{ title, totalParts, currentPart, partTitle, arcSummary, partOutline:[{ part, title, summary, cliffhanger }] }, scenes:[{ index, durationSec, narration, screenText, imagePrompt, transition, effect, soundDesign }] }",
     "Episode besar harus punya outline 10 part atau sesuai Total part. Script scenes hanya untuk Current part.",
     "Durasi video current part harus sekitar 1 menit dan tidak boleh lewat 60 detik.",
-    "Total narasi current part sekitar 105-135 kata agar TTS terdengar lega, tidak terburu-buru.",
+    "Total narasi current part sekitar 105-130 kata agar TTS terdengar lega, tidak terburu-buru.",
     "Hook harus langsung memancing rasa penasaran, tetapi narration scene 1 tetap mulai dari kejadian, bukan promosi.",
+    "Setiap narration harus terasa seperti ucapan yang bisa direkam langsung: ada rasa spontan, tapi tetap jelas dan tidak bertele-tele.",
     "Jangan tulis kalimat seperti: bersambung, akan berlanjut, lanjut di part berikutnya, tunggu part berikutnya, atau summary penutup. Akhiri part dengan beat cerita natural.",
     "Setiap scene wajib punya momen visual berbeda, supaya gambar tidak kembar.",
     "ScreenText harus pendek, seperti judul beat visual, bukan kalimat panjang.",
@@ -337,7 +342,7 @@ function normalizeScene(scene, index, input, options = {}) {
     durationSec,
     narration: sanitizeNarrationForSpeech(stripContinuationLanguage(cleanText(scene.narration || fallbackNarration(scene, input, index), 700)), input),
     screenText,
-    imagePrompt: enhancePrompt(scene.imagePrompt || "", input, index, options),
+    imagePrompt: enhancePrompt([screenText, scene.narration, scene.imagePrompt].filter(Boolean).join(" "), input, index, options),
     transition: cleanText(scene.transition || transitions[index % transitions.length], 80),
     effect: cleanText(scene.effect || "slow zoom, subtle film grain, dark vignette", 120),
     soundDesign: cleanText(scene.soundDesign || "low drone, faint room tone", 120)
