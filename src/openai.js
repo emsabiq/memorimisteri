@@ -3,11 +3,9 @@ import path from "node:path";
 import { config, paths } from "./config.js";
 import { safeFilename } from "./util.js";
 
-const apiBase = "https://api.openai.com/v1";
-
 export async function requestStoryJson(promptText) {
   assertOpenAi();
-  const response = await fetch(`${apiBase}/chat/completions`, {
+  const response = await fetch(`${config.openai.baseUrl}/chat/completions`, {
     method: "POST",
     headers: headersJson(),
     body: JSON.stringify({
@@ -31,7 +29,7 @@ export async function requestStoryJson(promptText) {
 export async function generateSceneImage({ storyId, scene, size, quality }) {
   assertOpenAi();
   const prompt = sanitizeImagePrompt(scene.imagePrompt);
-  const response = await fetch(`${apiBase}/images/generations`, {
+  const response = await fetch(`${config.openai.baseUrl}/images/generations`, {
     method: "POST",
     headers: headersJson(),
     body: JSON.stringify({
@@ -74,7 +72,7 @@ export async function generateSpeech({ storyId, text, voice, filenameSuffix = "o
   const filename = `${storyId}-${safeFilename(filenameSuffix)}-narration.mp3`;
   const outputPath = path.join(paths.audioDir, filename);
 
-  const response = await fetch(`${apiBase}/audio/speech`, {
+  const response = await fetch(`${config.openai.baseUrl}/audio/speech`, {
     method: "POST",
     headers: headersJson(),
     body: JSON.stringify({
@@ -97,6 +95,24 @@ export async function generateSpeech({ storyId, text, voice, filenameSuffix = "o
     path: outputPath,
     url: `/generated/audio/${filename}`
   };
+}
+
+export async function transcribeAudioFile(audioPath) {
+  assertOpenAi();
+  const buffer = await fs.readFile(audioPath);
+  const form = new FormData();
+  form.append("file", new Blob([buffer]), path.basename(audioPath));
+  form.append("model", config.openai.transcribeModel);
+  form.append("language", "id");
+  form.append("response_format", "json");
+
+  const response = await fetch(`${config.openai.baseUrl}/audio/transcriptions`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${config.openai.apiKey}` },
+    body: form
+  });
+  const data = await parseOpenAiResponse(response);
+  return String(data.text || "").replace(/\s+/g, " ").trim();
 }
 
 function assertOpenAi() {

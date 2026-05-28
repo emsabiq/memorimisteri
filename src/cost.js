@@ -33,6 +33,14 @@ export function estimateStoryCost({ promptText, outputText, sceneCount, imageSiz
   };
 }
 
+export function estimateTtsUsd(chars, provider, pricing) {
+  const count = Math.max(0, Number(chars || 0));
+  if (String(provider || "").toLowerCase() === "elevenlabs") {
+    return roundUsd((count / 1000) * Number(pricing.elevenlabsTtsUsdPer1KChars || 0));
+  }
+  return roundUsd((count / 1_000_000) * Number(pricing.ttsUsdPer1MChars || pricing.openaiTtsUsdPer1MChars || 0));
+}
+
 function roundUsd(value) {
   return Number(value.toFixed(5));
 }

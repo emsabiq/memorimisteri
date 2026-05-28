@@ -7,10 +7,12 @@ npm-debug.log*
 !.env.example
 
 data/stories.json
+data/submissions.json
 generated/audio/
 generated/images/
 generated/videos/
 generated/storyboards/
+generated/submissions/
 
 .DS_Store
 Thumbs.db

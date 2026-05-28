@@ -7,11 +7,18 @@
   "scripts": {
     "dev": "node src/server.js",
     "start": "node src/server.js",
-    "check": "node --check src/server.js && node --check src/story-engine.js && node --check src/render.js && node --check src/openai.js && node --check src/elevenlabs.js",
+    "preflight": "node src/preflight.js",
+    "deploy:site": "node src/deploy-site.js",
+    "run:once": "node src/run-once.js",
+    "check": "node --check src/server.js && node --check src/story-engine.js && node --check src/render.js && node --check src/openai.js && node --check src/elevenlabs.js && node --check src/submissions.js && node --check src/pipeline.js && node --check src/remote.js && node --check src/social.js && node --check src/run-once.js && node --check src/preflight.js && node --check src/deploy-site.js",
     "status": "node src/status.js"
   },
   "dependencies": {
+    "basic-ftp": "^6.0.1",
     "dotenv": "^16.4.7",
-    "express": "^5.2.1"
+    "express": "^5.2.1",
+    "mammoth": "^1.12.0",
+    "multer": "^2.1.1",
+    "ssh2-sftp-client": "^12.1.1"
   }
 }

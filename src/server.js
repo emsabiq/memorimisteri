@@ -1,11 +1,16 @@
 import express from "express";
+import fs from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import { spawnSync } from "node:child_process";
+import multer from "multer";
 import { config, ensureProjectDirs, paths, publicConfig } from "./config.js";
 import { createStoryDraft } from "./story-engine.js";
-import { generateElevenLabsSpeech } from "./elevenlabs.js";
-import { generateSceneImage, generateSpeech } from "./openai.js";
-import { getStory, listStories, saveStory } from "./storage.js";
-import { renderDraftVideo } from "./render.js";
+import { generateSceneImage } from "./openai.js";
+import { ensureStoryAudio, ensureStoryImages, renderAndPersist } from "./pipeline.js";
+import { getStory, listStories, listSubmissions, saveStory, saveSubmission } from "./storage.js";
+import { uploadNextPart } from "./run-once.js";
+import { approveSubmissionToStory, createSubmissionFromUpload, normalizeRemoteSubmission, storeUploadedFile, transcribeSubmission, validateSubmissionFile } from "./submissions.js";
 import { nowIso } from "./util.js";
 
 ensureProjectDirs();
@@ -14,6 +19,19 @@ const app = express();
 app.use(express.json({ limit: "2mb" }));
 app.use(express.static(paths.publicDir));
 app.use("/generated", express.static(paths.generatedDir));
+
+const upload = multer({
+  dest: path.join(os.tmpdir(), "mistis-submissions"),
+  limits: { fileSize: config.submissions.maxUploadMb * 1024 * 1024 },
+  fileFilter: (_req, file, callback) => {
+    try {
+      validateSubmissionFile(file);
+      callback(null, true);
+    } catch (error) {
+      callback(error);
+    }
+  }
+});
 
 app.get("/api/health", (_req, res) => {
   const ffmpeg = spawnSync("ffmpeg", ["-version"], { encoding: "utf8", windowsHide: true });
@@ -29,6 +47,42 @@ app.get("/api/health", (_req, res) => {
 app.get("/api/stories", async (_req, res, next) => {
   try {
     res.json({ stories: await listStories() });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get("/api/submissions", async (_req, res, next) => {
+  try {
+    res.json({ submissions: await listSubmissionsWithRemote() });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/submissions", upload.single("storyFile"), async (req, res, next) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: "File cerita wajib diunggah." });
+    const file = await storeUploadedFile(req.file);
+    const submission = await createSubmissionFromUpload({ file, body: req.body || {} });
+    res.json({ submission });
+  } catch (error) {
+    if (req.file?.path) await fs.rm(req.file.path, { force: true }).catch(() => {});
+    next(error);
+  }
+});
+
+app.post("/api/submissions/:id/transcribe", async (req, res, next) => {
+  try {
+    res.json({ submission: await transcribeSubmission(req.params.id) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/submissions/:id/story", async (req, res, next) => {
+  try {
+    res.json(await approveSubmissionToStory(req.params.id, req.body || {}));
   } catch (error) {
     next(error);
   }
@@ -133,7 +187,54 @@ app.use((error, _req, res, _next) => {
 
 app.listen(config.port, () => {
   console.log(`Mistis Story Video Studio running at http://localhost:${config.port}`);
+  startUploadLoop();
 });
+
+function startUploadLoop() {
+  if (!config.automation.dailyPartUpload) return;
+  const intervalMs = Math.max(60_000, config.automation.retryMinutes * 60_000);
+  let running = false;
+  const tick = async () => {
+    if (running) return;
+    running = true;
+    try {
+      const result = await uploadNextPart();
+      if (!result.skipped) console.log(`Daily part upload: ${JSON.stringify(result)}`);
+    } catch (error) {
+      console.warn(`Daily part upload loop gagal: ${error.message}`);
+    } finally {
+      running = false;
+    }
+  };
+  setTimeout(tick, 10_000);
+  setInterval(tick, intervalMs);
+}
+
+async function listSubmissionsWithRemote() {
+  const local = await listSubmissions();
+  const remote = await fetchRemoteSubmissions();
+  const byId = new Map();
+  for (const item of [...remote, ...local]) {
+    if (item?.id) byId.set(item.id, { ...(byId.get(item.id) || {}), ...item });
+  }
+  return [...byId.values()].sort((a, b) => String(b.updatedAt || b.createdAt).localeCompare(String(a.updatedAt || a.createdAt)));
+}
+
+async function fetchRemoteSubmissions() {
+  if (!config.publicBaseUrl) return [];
+  try {
+    const url = `${String(config.publicBaseUrl).replace(/\/+$/g, "")}/state/submissions.json?v=${Date.now()}`;
+    const response = await fetch(url, { cache: "no-store" });
+    if (!response.ok) return [];
+    const data = await response.json();
+    if (!Array.isArray(data)) return [];
+    const items = data.map(normalizeRemoteSubmission);
+    for (const item of items) await saveSubmission(item);
+    return items;
+  } catch {
+    return [];
+  }
+}
 
 async function requireStory(id) {
   const story = await getStory(id);
@@ -150,7 +251,7 @@ async function createUniqueStory(input) {
   return createStoryDraft(input, { existingStories });
 }
 
-async function ensureStoryImages(story, options = {}) {
+async function ensureStoryImagesOld(story, options = {}) {
   const warnings = options.warnings || [];
   const size = options.size || story.input.imageSize || config.openai.imageSize;
   const quality = options.quality || story.input.imageQuality || config.openai.imageQuality;
@@ -215,16 +316,25 @@ function safePromptForScene(story, scene) {
   ].join(", ");
 }
 
-async function ensureStoryAudio(story, options = {}) {
+async function ensureStoryAudioOld(story, options = {}) {
   const warnings = options.warnings || [];
-  const provider = String(options.provider || "openai").toLowerCase();
+  const requested = String(options.provider || story.input?.ttsProvider || (config.elevenlabs.apiKey ? "elevenlabs" : "openai")).toLowerCase();
+  const provider = requested === "elevenlabs" ? "elevenlabs" : "openai";
   if (story.assets.audio?.path && !options.force && String(story.assets.audio.provider || "openai").toLowerCase() === provider) return;
   try {
     const text = narrationTextForTts(story);
-    story.assets.audio = provider === "elevenlabs"
-      ? await generateElevenLabsSpeech({ storyId: story.id, text, filenameSuffix: "elevenlabs-female-horror" })
-      : await generateSpeech({ storyId: story.id, text, voice: "shimmer", filenameSuffix: "openai-female-horror" });
+    try {
+      story.assets.audio = provider === "elevenlabs"
+        ? await generateElevenLabsSpeech({ storyId: story.id, text, filenameSuffix: "elevenlabs-female-horror" })
+        : await generateSpeech({ storyId: story.id, text, voice: config.openai.ttsVoice, filenameSuffix: "openai-female-horror" });
+    } catch (error) {
+      if (provider !== "elevenlabs") throw error;
+      warnings.push(`ElevenLabs gagal/habis kuota, fallback langsung ke OpenAI: ${error.message}`);
+      story.assets.audio = await generateSpeech({ storyId: story.id, text, voice: config.openai.ttsVoice, filenameSuffix: "openai-fallback-after-elevenlabs" });
+      story.assets.audio.fallbackFrom = "elevenlabs";
+    }
     story.assets.audio.characters = text.length;
+    story.input.ttsProvider = story.assets.audio.provider || provider;
     story.updatedAt = nowIso();
     await saveStory(story);
   } catch (error) {
@@ -242,7 +352,7 @@ function narrationTextForTts(story) {
     .trim();
 }
 
-async function renderAndPersist(story) {
+async function renderAndPersistOld(story) {
   assertFinalImages(story);
   const rendered = await renderDraftVideo(story);
   story.assets.video = rendered.video;

@@ -1,7 +1,9 @@
 const state = {
   config: null,
   stories: [],
+  submissions: [],
   current: null,
+  currentSubmission: null,
   busy: false
 };
 
@@ -11,6 +13,10 @@ const els = {
   publishStatus: document.querySelector("#publishStatus"),
   storyCount: document.querySelector("#storyCount"),
   storyList: document.querySelector("#storyList"),
+  submissionCount: document.querySelector("#submissionCount"),
+  submissionList: document.querySelector("#submissionList"),
+  submissionBadge: document.querySelector("#submissionBadge"),
+  submissionDetail: document.querySelector("#submissionDetail"),
   storyTitle: document.querySelector("#storyTitle"),
   sourceBadge: document.querySelector("#sourceBadge"),
   logline: document.querySelector("#logline"),
@@ -41,6 +47,7 @@ init();
 async function init() {
   await loadHealth();
   await loadStories();
+  await loadSubmissions();
   bindEvents();
   render();
 }
@@ -72,6 +79,11 @@ async function loadStories() {
   if (!state.current && state.stories.length) state.current = state.stories[0];
 }
 
+async function loadSubmissions() {
+  const data = await api("/api/submissions");
+  state.submissions = data.submissions || [];
+}
+
 async function createStory(formData) {
   setBusy(true, "Membuat draft cerita");
   try {
@@ -82,6 +94,7 @@ async function createStory(formData) {
     });
     state.current = data.story;
     await loadStories();
+    await loadSubmissions();
     toast("Draft cerita siap.");
   } catch (error) {
     toast(error.message);
@@ -101,6 +114,7 @@ async function createFullStory(formData) {
     });
     state.current = data.story;
     await loadStories();
+    await loadSubmissions();
     const warning = data.warnings?.length ? ` (${data.warnings.length} warning)` : "";
     toast(`Video part selesai${warning}.`);
   } catch (error) {
@@ -174,6 +188,7 @@ async function renderVideo() {
 
 function render() {
   renderStoryList();
+  renderSubmissionList();
   renderCurrent();
   renderButtons();
 }
@@ -192,6 +207,90 @@ function renderStoryList() {
       render();
     });
   });
+}
+
+function renderSubmissionList() {
+  els.submissionCount.textContent = String(state.submissions.length);
+  els.submissionList.innerHTML = state.submissions.map((item) => `
+    <button type="button" data-id="${item.id}">
+      <strong>${escapeHtml(item.title || "Kiriman tanpa judul")}</strong>
+      <span>${escapeHtml(item.fanName || "Anonim")} - ${submissionStatus(item)}</span>
+    </button>
+  `).join("");
+  els.submissionList.querySelectorAll("button").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.currentSubmission = state.submissions.find((item) => item.id === button.dataset.id);
+      renderSubmissionDetail();
+    });
+  });
+  renderSubmissionDetail();
+}
+
+function renderSubmissionDetail() {
+  const item = state.currentSubmission;
+  if (!item) {
+    els.submissionBadge.textContent = "Belum ada";
+    els.submissionDetail.textContent = "Pilih kiriman dari antrian untuk transcribe atau jadikan episode.";
+    return;
+  }
+  els.submissionBadge.textContent = submissionStatus(item);
+  const canTranscribe = item.file?.durationSec && !item.text;
+  const canStory = Boolean(item.text || item.transcript);
+  els.submissionDetail.innerHTML = `
+    <div class="submission-card">
+      <div>
+        <strong>${escapeHtml(item.title || "Kiriman follower")}</strong>
+        <p>${escapeHtml(item.fanName || "Anonim")} ${item.contact ? `- ${escapeHtml(item.contact)}` : ""}</p>
+        <small>${escapeHtml(item.originalFilename || "")} ${item.file?.durationSec ? `- ${Math.round(item.file.durationSec)} detik` : ""}</small>
+      </div>
+      <div class="submission-actions">
+        <button id="transcribeSubmissionBtn" class="secondary" type="button" ${canTranscribe ? "" : "disabled"}>Transcribe</button>
+        <button id="storySubmissionBtn" class="primary" type="button" ${canStory ? "" : "disabled"}>Buat episode</button>
+      </div>
+      <pre>${escapeHtml((item.text || item.transcript || item.note || "Belum ada teks/transkrip.").slice(0, 1800))}</pre>
+    </div>
+  `;
+  document.querySelector("#transcribeSubmissionBtn")?.addEventListener("click", transcribeCurrentSubmission);
+  document.querySelector("#storySubmissionBtn")?.addEventListener("click", storyFromCurrentSubmission);
+}
+
+async function transcribeCurrentSubmission() {
+  if (!state.currentSubmission) return;
+  setBusy(true, "Transcribe kiriman follower");
+  try {
+    const data = await api(`/api/submissions/${state.currentSubmission.id}/transcribe`, { method: "POST" });
+    state.currentSubmission = data.submission;
+    await loadSubmissions();
+    toast("Transkrip siap direview.");
+  } catch (error) {
+    toast(error.message);
+  } finally {
+    setBusy(false);
+    render();
+  }
+}
+
+async function storyFromCurrentSubmission() {
+  if (!state.currentSubmission) return;
+  setBusy(true, "Membuat episode dari kiriman");
+  try {
+    const formData = new FormData(els.form);
+    const payload = Object.fromEntries(formData.entries());
+    const data = await api(`/api/submissions/${state.currentSubmission.id}/story`, {
+      method: "POST",
+      body: JSON.stringify(payload)
+    });
+    state.currentSubmission = data.submission;
+    state.current = data.story;
+    await loadStories();
+    await loadSubmissions();
+    toast("Draft episode dari follower siap.");
+  } catch (error) {
+    toast(error.message);
+  } finally {
+    setBusy(false);
+    render();
+  }
 }
 
 function renderCurrent() {
@@ -338,6 +437,16 @@ function setFormValue(name, value) {
 function partLabel(story) {
   const episode = story.plan?.episode || {};
   return episode.currentPart ? `Part ${episode.currentPart}/${episode.totalParts}` : "Draft";
+}
+
+function submissionStatus(item) {
+  const map = {
+    waiting_transcribe: "Menunggu transcribe",
+    ready_for_review: "Siap review",
+    ready_for_story: "Siap cerita",
+    converted_to_story: "Sudah jadi draft"
+  };
+  return map[item.status] || item.status || "Baru";
 }
 
 function renderButtons() {

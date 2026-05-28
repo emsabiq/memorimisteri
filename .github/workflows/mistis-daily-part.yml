@@ -1,0 +1,105 @@
+name: Mistis Daily Part
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Every 15 minutes. The runner itself enforces one successful part per local day.
+    - cron: "*/15 * * * *"
+
+concurrency:
+  group: mistis-daily-part
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  generate-and-upload:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      PUBLIC_BASE_URL: ${{ secrets.PUBLIC_BASE_URL || 'https://mistis.emsa.pro' }}
+      UPLOAD_DRIVER: ${{ secrets.UPLOAD_DRIVER || 'sftp' }}
+      SFTP_HOST: ${{ secrets.SFTP_HOST }}
+      SFTP_PORT: ${{ secrets.SFTP_PORT || '22' }}
+      SFTP_USER: ${{ secrets.SFTP_USER }}
+      SFTP_PASSWORD: ${{ secrets.SFTP_PASSWORD }}
+      SFTP_REMOTE_DIR: ${{ secrets.SFTP_REMOTE_DIR || '/public_html/mistis' }}
+      FTP_HOST: ${{ secrets.FTP_HOST }}
+      FTP_PORT: ${{ secrets.FTP_PORT || '21' }}
+      FTP_USER: ${{ secrets.FTP_USER }}
+      FTP_PASSWORD: ${{ secrets.FTP_PASSWORD }}
+      FTP_REMOTE_DIR: ${{ secrets.FTP_REMOTE_DIR || '/public_html/mistis' }}
+
+      AUTOMATION_ENABLED: "true"
+      DAILY_PART_UPLOAD_ENABLED: "true"
+      PART_UPLOAD_RETRY_MINUTES: ${{ secrets.PART_UPLOAD_RETRY_MINUTES || '15' }}
+      SOCIAL_ACCOUNT_NAME: memorimisteri
+
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      OPENAI_BASE_URL: ${{ secrets.OPENAI_BASE_URL || 'https://api.openai.com/v1' }}
+      STORY_MODEL: ${{ secrets.STORY_MODEL || 'gpt-4.1-mini' }}
+      IMAGE_MODEL: ${{ secrets.IMAGE_MODEL || 'gpt-image-1-mini' }}
+      IMAGE_SIZE: ${{ secrets.IMAGE_SIZE || '1024x1536' }}
+      IMAGE_QUALITY: ${{ secrets.IMAGE_QUALITY || 'low' }}
+      OPENAI_TTS_MODEL: ${{ secrets.OPENAI_TTS_MODEL || 'gpt-4o-mini-tts' }}
+      OPENAI_TTS_VOICE: ${{ secrets.OPENAI_TTS_VOICE || 'shimmer' }}
+      OPENAI_TRANSCRIBE_MODEL: ${{ secrets.OPENAI_TRANSCRIBE_MODEL || 'whisper-1' }}
+      ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
+      ELEVENLABS_MODEL: ${{ secrets.ELEVENLABS_MODEL || 'eleven_multilingual_v2' }}
+      ELEVENLABS_VOICE_ID: ${{ secrets.ELEVENLABS_VOICE_ID }}
+      MISTIS_TTS_PROVIDER: ${{ secrets.MISTIS_TTS_PROVIDER || 'elevenlabs' }}
+
+      MISTIS_IDEA: ${{ secrets.MISTIS_IDEA }}
+      MISTIS_EPISODE_TITLE: ${{ secrets.MISTIS_EPISODE_TITLE }}
+      MISTIS_TOTAL_PARTS: ${{ secrets.MISTIS_TOTAL_PARTS || '10' }}
+      MISTIS_THEME: ${{ secrets.MISTIS_THEME || 'rumah' }}
+      MISTIS_DURATION: ${{ secrets.MISTIS_DURATION || '60' }}
+      MISTIS_SCENES: ${{ secrets.MISTIS_SCENES || '8' }}
+
+      GRAPH_API_VERSION: ${{ secrets.GRAPH_API_VERSION || 'v25.0' }}
+      FACEBOOK_UPLOAD_ENABLED: ${{ secrets.FACEBOOK_UPLOAD_ENABLED || 'true' }}
+      FACEBOOK_PAGE_ID: ${{ secrets.MISTIS_FACEBOOK_PAGE_ID || secrets.FACEBOOK_PAGE_ID }}
+      FACEBOOK_PAGE_ACCESS_TOKEN: ${{ secrets.MISTIS_FACEBOOK_PAGE_ACCESS_TOKEN || secrets.FACEBOOK_PAGE_ACCESS_TOKEN }}
+      FACEBOOK_USER_ACCESS_TOKEN: ${{ secrets.MISTIS_FACEBOOK_USER_ACCESS_TOKEN || secrets.FACEBOOK_USER_ACCESS_TOKEN }}
+      FACEBOOK_MEDIA_TYPE: ${{ secrets.FACEBOOK_MEDIA_TYPE || 'reel' }}
+      FACEBOOK_VIDEO_STATE: ${{ secrets.FACEBOOK_VIDEO_STATE || 'PUBLISHED' }}
+
+      INSTAGRAM_UPLOAD_ENABLED: ${{ secrets.INSTAGRAM_UPLOAD_ENABLED || 'true' }}
+      INSTAGRAM_IG_USER_ID: ${{ secrets.MISTIS_INSTAGRAM_IG_USER_ID || secrets.INSTAGRAM_IG_USER_ID || '17841435998195290' }}
+      INSTAGRAM_ACCESS_TOKEN: ${{ secrets.MISTIS_INSTAGRAM_ACCESS_TOKEN || secrets.INSTAGRAM_ACCESS_TOKEN }}
+      INSTAGRAM_SHARE_TO_FEED: ${{ secrets.INSTAGRAM_SHARE_TO_FEED || 'true' }}
+      INSTAGRAM_MAX_DURATION_SECONDS: ${{ secrets.INSTAGRAM_MAX_DURATION_SECONDS || '90' }}
+      INSTAGRAM_CONTAINER_POLL_SECONDS: ${{ secrets.INSTAGRAM_CONTAINER_POLL_SECONDS || '6' }}
+      INSTAGRAM_CONTAINER_MAX_ATTEMPTS: ${{ secrets.INSTAGRAM_CONTAINER_MAX_ATTEMPTS || '90' }}
+
+      THREADS_UPLOAD_ENABLED: ${{ secrets.THREADS_UPLOAD_ENABLED || 'true' }}
+      THREADS_USER_ID: ${{ secrets.THREADS_USER_ID }}
+      THREADS_ACCESS_TOKEN: ${{ secrets.THREADS_ACCESS_TOKEN }}
+      THREADS_GRAPH_BASE_URL: ${{ secrets.THREADS_GRAPH_BASE_URL || 'https://graph.threads.net/v1.0' }}
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install FFmpeg
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends ffmpeg
+
+      - name: Install dependencies
+        run: npm ci --no-audit --fund=false
+
+      - name: Validate source
+        run: npm run check
+
+      - name: Preflight
+        run: npm run preflight
+
+      - name: Generate, upload, and publish one due part
+        run: npm run run:once

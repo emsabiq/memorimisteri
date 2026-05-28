@@ -16,6 +16,7 @@
             <p id="runtimeStatus">Memuat status</p>
           </div>
         </div>
+        <a class="fan-link" href="/fan.php" target="_blank" rel="noreferrer">Halaman kirim cerita</a>
 
         <form id="storyForm" class="panel form-panel">
           <label>
@@ -102,7 +103,16 @@
             <span>YouTube</span>
             <span>Facebook</span>
             <span>Instagram</span>
+            <span>Threads</span>
           </div>
+        </section>
+
+        <section class="panel compact">
+          <div class="section-head">
+            <h2>Antrian Penggemar</h2>
+            <span id="submissionCount" class="pill">0</span>
+          </div>
+          <div id="submissionList" class="submission-list"></div>
         </section>
 
         <section class="panel compact">
@@ -179,6 +189,14 @@
             <span id="episodeBadge" class="pill">0 part</span>
           </div>
           <div id="episodeGrid" class="episode-grid"></div>
+        </section>
+
+        <section class="scene-section">
+          <div class="section-head">
+            <h2>Kiriman Terpilih</h2>
+            <span id="submissionBadge" class="pill">Belum ada</span>
+          </div>
+          <div id="submissionDetail" class="submission-detail">Pilih kiriman dari antrian untuk transcribe atau jadikan episode.</div>
         </section>
 
         <section class="scene-section">

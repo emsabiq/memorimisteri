@@ -3,6 +3,7 @@ import path from "node:path";
 import { paths } from "./config.js";
 
 const storiesFile = path.join(paths.dataDir, "stories.json");
+const submissionsFile = path.join(paths.dataDir, "submissions.json");
 
 async function readJson(file, fallback) {
   try {
@@ -37,4 +38,28 @@ export async function saveStory(story) {
   else stories.push(story);
   await writeJson(storiesFile, stories);
   return story;
+}
+
+export async function saveStories(stories) {
+  await writeJson(storiesFile, stories);
+  return stories;
+}
+
+export async function listSubmissions() {
+  const submissions = await readJson(submissionsFile, []);
+  return submissions.sort((a, b) => String(b.updatedAt || b.createdAt).localeCompare(String(a.updatedAt || a.createdAt)));
+}
+
+export async function getSubmission(id) {
+  const submissions = await readJson(submissionsFile, []);
+  return submissions.find((item) => item.id === id) || null;
+}
+
+export async function saveSubmission(submission) {
+  const submissions = await readJson(submissionsFile, []);
+  const index = submissions.findIndex((item) => item.id === submission.id);
+  if (index >= 0) submissions[index] = submission;
+  else submissions.push(submission);
+  await writeJson(submissionsFile, submissions);
+  return submission;
 }
