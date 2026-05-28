@@ -147,7 +147,7 @@ export async function renderDraftVideo(story) {
       narrationSourceDurationSec: Number(sourceAudioDuration.toFixed(2)),
       narrationTempo: Number(narrationTempo.toFixed(4)),
       captionContentDurationSec: Number(contentDuration.toFixed(2)),
-      captionTiming: story.assets?.captions?.words?.length ? "tts-word-transcript" : story.assets?.captions?.segments?.length ? "tts-segment-transcript" : "scene-estimate"
+      captionTiming: story.assets?.captions?.words?.length ? "tts-word-transcript" : story.assets?.captions?.segments?.length ? "tts-segment-transcript" : "tts-full-text-estimate"
     },
     fallbackImages
   };
@@ -522,14 +522,12 @@ async function writeSubtitleAss({ outputPath, story, scenes, contentDuration, to
   });
 
   if (!events.length) {
-    let cursor = subtitleBase;
-    for (const scene of scenes) {
-      const duration = effectiveSceneDuration(scene);
-      const start = Math.max(subtitleBase, cursor + subtitleOffsetSeconds);
-      const end = cursor + duration + subtitleOffsetSeconds;
-      events.push(...captionEventsForCue(scene.narration, start, end));
-      cursor += duration;
-    }
+    const narrationText = story.assets?.captions?.text || scenes.map((scene) => scene.narration).join(" ");
+    events.push(...captionEventsForCue(
+      narrationText,
+      Math.max(subtitleBase, subtitleBase + subtitleOffsetSeconds),
+      Math.max(subtitleBase + 0.5, subtitleBase + contentDuration + subtitleOffsetSeconds)
+    ));
   }
 
   events.push({
