@@ -18,8 +18,8 @@ export function absolutizeGeneratedUrls(story) {
   if (!base || !story) return story;
   const withUrl = (asset) => {
     if (!asset?.url) return asset;
-    if (/^https?:\/\//i.test(asset.url)) return asset;
-    return { ...asset, url: `${base}${String(asset.url).replace(/^\/generated\//, "/")}` };
+    const path = assetPublicPath(asset.url);
+    return path ? { ...asset, url: `${base}${path}` } : asset;
   };
   return {
     ...story,
@@ -30,6 +30,22 @@ export function absolutizeGeneratedUrls(story) {
       images: (story.assets?.images || []).map(withUrl)
     }
   };
+}
+
+function assetPublicPath(value) {
+  const raw = String(value || "");
+  if (!raw) return "";
+  if (raw.startsWith("/generated/")) return raw.replace(/^\/generated\//, "/");
+  if (raw.startsWith("/")) return raw;
+  try {
+    const pathname = decodeURIComponent(new URL(raw).pathname);
+    const generatedIndex = pathname.indexOf("/generated/");
+    if (generatedIndex >= 0) return pathname.slice(generatedIndex).replace(/^\/generated\//, "/");
+    const known = pathname.match(/\/(?:videos|images|audio|submissions|state)\/[^?#]+$/);
+    return known ? known[0] : "";
+  } catch {
+    return "";
+  }
 }
 
 export async function uploadStoryAssets(story) {

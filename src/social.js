@@ -155,6 +155,17 @@ async function publishToInstagram({ videoUrl, title, description, coverUrl, dura
 
 async function publishToThreads({ videoUrl, text }) {
   if (!config.threads.userId || !config.threads.accessToken) throw new Error("THREADS_USER_ID dan THREADS_ACCESS_TOKEN belum lengkap.");
+  try {
+    return await publishThreadsContainer({ videoUrl, text });
+  } catch (error) {
+    if (!videoUrl) throw error;
+    const fallbackText = clean([text, videoUrl].filter(Boolean).join("\n\n")).slice(0, 500);
+    const fallback = await publishThreadsContainer({ videoUrl: "", text: fallbackText });
+    return { ...fallback, fallbackFromVideo: error.message };
+  }
+}
+
+async function publishThreadsContainer({ videoUrl, text }) {
   const body = new URLSearchParams({
     access_token: config.threads.accessToken,
     media_type: videoUrl ? "VIDEO" : "TEXT",
@@ -172,7 +183,7 @@ async function publishToThreads({ videoUrl, text }) {
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({ access_token: config.threads.accessToken, creation_id: creationId })
   });
-  return { ok: Boolean(published.id), type: "threads_post", id: clean(published.id), containerId: creationId };
+  return { ok: Boolean(published.id), type: videoUrl ? "threads_video" : "threads_text", id: clean(published.id), containerId: creationId };
 }
 
 function threadsText(title, description) {
