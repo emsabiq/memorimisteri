@@ -82,6 +82,25 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
+      - name: Initialize run log
+        shell: bash
+        run: |
+          mkdir -p .github-run-logs
+          {
+            echo "# Mistis Daily Part"
+            echo "run_id=$GITHUB_RUN_ID"
+            echo "workflow=$GITHUB_WORKFLOW"
+            echo "actor=$GITHUB_ACTOR"
+            echo "ref=$GITHUB_REF"
+            echo "sha=$GITHUB_SHA"
+            echo "utc=$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+            echo "public_base_url_configured=$([ -n "$PUBLIC_BASE_URL" ] && echo yes || echo no)"
+            echo "remote_upload_configured=$([ -n "$FTP_HOST$SFTP_HOST" ] && echo yes || echo no)"
+            echo "facebook_upload_enabled=${FACEBOOK_UPLOAD_ENABLED:-false}"
+            echo "instagram_upload_enabled=${INSTAGRAM_UPLOAD_ENABLED:-false}"
+            echo "threads_upload_enabled=${THREADS_UPLOAD_ENABLED:-false}"
+          } | tee .github-run-logs/run-context.txt
+
       - uses: actions/setup-node@v6
         with:
           node-version: "22"
@@ -89,18 +108,106 @@ jobs:
           cache-dependency-path: package-lock.json
 
       - name: Install FFmpeg
+        shell: bash
         run: |
+          set -o pipefail
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends ffmpeg
+          sudo apt-get install -y --no-install-recommends ffmpeg 2>&1 | tee .github-run-logs/install-ffmpeg.log
 
       - name: Install dependencies
-        run: npm ci --no-audit --fund=false
+        shell: bash
+        run: |
+          set -o pipefail
+          npm ci --no-audit --fund=false 2>&1 | tee .github-run-logs/npm-ci.log
 
       - name: Validate source
-        run: npm run check
+        shell: bash
+        run: |
+          set -o pipefail
+          npm run check 2>&1 | tee .github-run-logs/check.log
 
       - name: Preflight
-        run: npm run preflight
+        shell: bash
+        run: |
+          set -o pipefail
+          npm run preflight 2>&1 | tee .github-run-logs/preflight.log
+
+      - name: Inspect remote daily state
+        shell: bash
+        run: |
+          set -o pipefail
+          node --input-type=module <<'EOF' 2>&1 | tee .github-run-logs/remote-state.log
+          const base = String(process.env.PUBLIC_BASE_URL || "").replace(/\/+$/g, "");
+          if (!base) {
+            console.log(JSON.stringify({ ok: false, skipped: true, reason: "PUBLIC_BASE_URL empty" }, null, 2));
+            process.exit(0);
+          }
+          const response = await fetch(`${base}/state/stories.json?v=${Date.now()}`, { cache: "no-store" });
+          const text = await response.text();
+          let stories = [];
+          try {
+            stories = JSON.parse(text);
+          } catch {}
+          if (!Array.isArray(stories)) stories = [];
+          const today = new Date().toISOString().slice(0, 10);
+          const uploadedToday = stories
+            .filter((story) => story?.publish?.state === "uploaded" && String(story.publish.uploadedAt || "").startsWith(today))
+            .map((story) => ({
+              id: story.id,
+              title: story.title,
+              part: story.plan?.episode?.currentPart || story.input?.partNumber || "",
+              uploadedAt: story.publish.uploadedAt
+            }));
+          console.log(JSON.stringify({
+            ok: response.ok,
+            status: response.status,
+            storyCount: stories.length,
+            uploadedToday
+          }, null, 2));
+          EOF
 
       - name: Generate, upload, and publish one due part
-        run: npm run run:once
+        shell: bash
+        run: |
+          set -o pipefail
+          npm run run:once 2>&1 | tee .github-run-logs/run-once.log
+
+      - name: Write action summary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "## Mistis Daily Part"
+            echo ""
+            echo "- Run ID: \`$GITHUB_RUN_ID\`"
+            echo "- Ref: \`$GITHUB_REF\`"
+            echo "- SHA: \`$GITHUB_SHA\`"
+            echo "- UTC: \`$(date -u +"%Y-%m-%dT%H:%M:%SZ")\`"
+            echo ""
+            echo "### Remote State"
+            echo '```json'
+            if [ -f .github-run-logs/remote-state.log ]; then
+              tail -n 80 .github-run-logs/remote-state.log
+            else
+              echo '{"status":"not collected"}'
+            fi
+            echo '```'
+            echo ""
+            echo "### Run Once"
+            echo '```'
+            if [ -f .github-run-logs/run-once.log ]; then
+              tail -n 120 .github-run-logs/run-once.log
+            else
+              echo "run-once did not start"
+            fi
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload action logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mistis-daily-part-logs-${{ github.run_id }}
+          path: .github-run-logs/
+          if-no-files-found: warn
+          retention-days: 14
