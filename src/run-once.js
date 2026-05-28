@@ -254,15 +254,23 @@ function nextSequentialStory(stories) {
   }
   return rendered
     .sort(comparePart)
-    .find((story) => previousPartsUploaded(groups.get(episodeKey(story)) || [], story));
+    .find((story) => {
+      const group = groups.get(episodeKey(story)) || [];
+      return !samePartAlreadyUploaded(group, story) && previousPartsUploaded(group, story);
+    });
+}
+
+function samePartAlreadyUploaded(group, story) {
+  const part = storyPartNumber(story);
+  return group.some((item) => item.publish?.state === "uploaded" && isPublishReady(item) && storyPartNumber(item) === part);
 }
 
 function previousPartsUploaded(group, story) {
-  const part = Number(story.plan?.episode?.currentPart || story.input?.partNumber || 1);
+  const part = storyPartNumber(story);
   if (part <= 1) return true;
   const uploaded = new Set(group
     .filter((item) => item.publish?.state === "uploaded" && isPublishReady(item))
-    .map((item) => Number(item.plan?.episode?.currentPart || item.input?.partNumber || 0)));
+    .map((item) => storyPartNumber(item)));
   for (let index = 1; index < part; index += 1) {
     if (!uploaded.has(index)) return false;
   }
@@ -270,7 +278,12 @@ function previousPartsUploaded(group, story) {
 }
 
 function comparePart(a, b) {
-  return episodeKey(a).localeCompare(episodeKey(b)) || Number(a.plan?.episode?.currentPart || 1) - Number(b.plan?.episode?.currentPart || 1);
+  return episodeKey(a).localeCompare(episodeKey(b)) || storyPartNumber(a) - storyPartNumber(b);
+}
+
+function storyPartNumber(story) {
+  const value = Number(story.plan?.episode?.currentPart || story.input?.partNumber || 1);
+  return Number.isFinite(value) ? value : 1;
 }
 
 function episodeKey(story) {
