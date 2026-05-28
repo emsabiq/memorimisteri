@@ -359,7 +359,10 @@ function storyboardDetailsFromStory(story) {
 }
 
 function normalizeStoryboardDetail(item) {
-  if (typeof item === "string") return { beat: item.trim(), narration: "", imagePrompt: "" };
+  if (typeof item === "string") {
+    const text = item.trim();
+    return { beat: text, narration: text, imagePrompt: text };
+  }
   return {
     beat: String(item?.beat || item?.screenText || item?.summary || item?.title || "").trim(),
     narration: String(item?.narration || item?.voiceover || item?.text || "").trim(),
