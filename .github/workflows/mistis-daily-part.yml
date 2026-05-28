@@ -8,10 +8,16 @@ on:
         required: false
         default: false
         type: boolean
-      part_number:
-        description: Part number for a forced new generation.
+      ignore_today_guard:
+        description: Run the normal scheduled pipeline even if a part was already uploaded today.
         required: false
-        default: "1"
+        default: false
+        type: boolean
+      part_number:
+        description: Part number for a forced new generation, or next for the latest active episode.
+        required: false
+        default: "next"
+        type: string
       reset_episode_state:
         description: Clear remote story state first so this run becomes the only active episode.
         required: false
@@ -80,6 +86,8 @@ jobs:
       IMAGE_QUALITY: ${{ secrets.IMAGE_QUALITY }}
       OPENAI_TTS_MODEL: ${{ secrets.OPENAI_TTS_MODEL }}
       OPENAI_TTS_VOICE: ${{ secrets.OPENAI_TTS_VOICE }}
+      OPENAI_TTS_MALE_VOICES: ${{ secrets.OPENAI_TTS_MALE_VOICES || 'onyx,echo,verse,alloy' }}
+      OPENAI_TTS_FEMALE_VOICES: ${{ secrets.OPENAI_TTS_FEMALE_VOICES || 'nova,shimmer,coral,sage' }}
       OPENAI_TRANSCRIBE_MODEL: ${{ secrets.OPENAI_TRANSCRIBE_MODEL }}
       ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
       ELEVENLABS_MODEL: ${{ secrets.ELEVENLABS_MODEL }}
@@ -97,7 +105,8 @@ jobs:
       MISTIS_DURATION: ${{ inputs.duration || secrets.MISTIS_DURATION }}
       MISTIS_SCENES: ${{ inputs.scenes || secrets.MISTIS_SCENES }}
       MISTIS_FORCE_NEW_PART: ${{ inputs.force_new_part || 'false' }}
-      MISTIS_FORCE_PART_NUMBER: ${{ inputs.part_number || '1' }}
+      MISTIS_IGNORE_TODAY_GUARD: ${{ inputs.ignore_today_guard || 'false' }}
+      MISTIS_FORCE_PART_NUMBER: ${{ inputs.part_number || 'next' }}
       MISTIS_RESET_EPISODE_STATE: ${{ inputs.reset_episode_state || 'false' }}
 
       GRAPH_API_VERSION: ${{ secrets.GRAPH_API_VERSION }}
@@ -117,7 +126,7 @@ jobs:
       INSTAGRAM_CONTAINER_POLL_SECONDS: ${{ secrets.INSTAGRAM_CONTAINER_POLL_SECONDS }}
       INSTAGRAM_CONTAINER_MAX_ATTEMPTS: ${{ secrets.INSTAGRAM_CONTAINER_MAX_ATTEMPTS }}
 
-      THREADS_UPLOAD_ENABLED: ${{ secrets.THREADS_UPLOAD_ENABLED }}
+      THREADS_UPLOAD_ENABLED: "false"
       THREADS_USER_ID: ${{ secrets.THREADS_USER_ID }}
       THREADS_ACCESS_TOKEN: ${{ secrets.THREADS_ACCESS_TOKEN }}
       THREADS_GRAPH_BASE_URL: ${{ secrets.THREADS_GRAPH_BASE_URL }}
@@ -143,7 +152,8 @@ jobs:
             echo "instagram_upload_enabled=${INSTAGRAM_UPLOAD_ENABLED:-false}"
             echo "threads_upload_enabled=${THREADS_UPLOAD_ENABLED:-false}"
             echo "force_new_part=${MISTIS_FORCE_NEW_PART:-false}"
-            echo "force_part_number=${MISTIS_FORCE_PART_NUMBER:-1}"
+            echo "ignore_today_guard=${MISTIS_IGNORE_TODAY_GUARD:-false}"
+            echo "force_part_number=${MISTIS_FORCE_PART_NUMBER:-next}"
             echo "reset_episode_state=${MISTIS_RESET_EPISODE_STATE:-false}"
             echo "story_idea_configured=$([ -n "$MISTIS_IDEA" ] && echo yes || echo no)"
             echo "theme=${MISTIS_THEME:-auto}"

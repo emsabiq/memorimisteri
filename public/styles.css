@@ -393,6 +393,20 @@ button:not(:disabled):hover {
   gap: 12px;
 }
 
+.section-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.compact-action {
+  min-height: 34px;
+  padding: 0 12px;
+  font-size: 12px;
+}
+
 .pill {
   border: 1px solid #403833;
   background: #0e0e0d;

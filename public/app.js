@@ -21,6 +21,7 @@ const els = {
   todayUpload: document.querySelector("#todayUpload"),
   retryCount: document.querySelector("#retryCount"),
   sourceBadge: document.querySelector("#sourceBadge"),
+  runDailyWorkflowBtn: document.querySelector("#runDailyWorkflowBtn"),
   logline: document.querySelector("#logline"),
   flowSteps: document.querySelector("#flowSteps"),
   videoSlot: document.querySelector("#videoSlot"),
@@ -53,6 +54,7 @@ function bindEvents() {
   document.querySelectorAll(".tabs button").forEach((button) => {
     button.addEventListener("click", () => selectTab(button.dataset.tab));
   });
+  els.runDailyWorkflowBtn?.addEventListener("click", runDailyPartWorkflow);
 }
 
 async function unlock() {
@@ -105,7 +107,7 @@ function renderStatus() {
   setLamp(els.fbLamp, cfg.social?.facebookReady && auto.facebook);
   setLamp(els.igLamp, cfg.social?.instagramReady && auto.instagram);
   setLamp(els.threadsLamp, cfg.social?.threadsReady && auto.threads);
-  els.automationStatus.textContent = `Upload harian: ${auto.dailyPartUpload ? "aktif" : "mati"}; retry: ${auto.retryMinutes || 15} menit; akun: ${auto.accountName || "memorimisteri"}.`;
+  els.automationStatus.textContent = `Upload harian: ${auto.dailyPartUpload ? "aktif" : "mati"}; retry: ${auto.retryMinutes || 15} menit; akun: ${auto.accountName || "memorimisteri"}; workflow manual: ${cfg.github?.workflowDispatch ? "siap" : "belum diset"}.`;
   els.remoteStatus.textContent = cfg.ftp?.configured ? `${cfg.ftp.host} -> ${cfg.ftp.remoteDir}` : "Remote belum lengkap.";
   els.providerStatus.textContent = [
     cfg.providers?.openai ? "OpenAI aktif" : "OpenAI belum aktif",
@@ -247,6 +249,18 @@ async function storyFromCurrentSubmission() {
     state.current = data.story;
     await loadAll();
     toast("Draft episode dari follower siap.");
+  });
+}
+
+async function runDailyPartWorkflow() {
+  if (state.busy) return;
+  if (!confirm("Jalankan workflow Mistis Daily Part sekarang? Ini sama seperti jadwal otomatis dan bisa memakai API serta upload sesuai setting workflow.")) return;
+  await busy("Menjalankan workflow harian", async () => {
+    await fetchJson("/api/workflows/mistis-daily-part", {
+      method: "POST",
+      body: JSON.stringify({})
+    });
+    toast("Workflow sudah dikirim ke GitHub Actions.");
   });
 }
 

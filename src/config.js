@@ -63,6 +63,8 @@ export const config = {
     ttsModel: clean(process.env.OPENAI_TTS_MODEL || process.env.TTS_MODEL || "gpt-4o-mini-tts"),
     ttsVoice: clean(process.env.OPENAI_TTS_VOICE || process.env.TTS_VOICE || "shimmer"),
     ttsVoices: clean(process.env.OPENAI_TTS_VOICES || "nova,shimmer,coral,verse,sage,alloy").split(",").map((item) => clean(item)).filter(Boolean),
+    ttsMaleVoices: clean(process.env.OPENAI_TTS_MALE_VOICES || "onyx,echo,verse,alloy").split(",").map((item) => clean(item)).filter(Boolean),
+    ttsFemaleVoices: clean(process.env.OPENAI_TTS_FEMALE_VOICES || "nova,shimmer,coral,sage").split(",").map((item) => clean(item)).filter(Boolean),
     transcribeModel: clean(process.env.OPENAI_TRANSCRIBE_MODEL || "whisper-1"),
     ttsEffectsEnabled: boolEnv("TTS_EFFECTS_ENABLED", true)
   },
@@ -70,7 +72,9 @@ export const config = {
     apiKey: process.env.ELEVENLABS_API_KEY || "",
     model: clean(process.env.ELEVENLABS_MODEL || "eleven_multilingual_v2"),
     voiceId: clean(process.env.ELEVENLABS_VOICE_ID || "pFZP5JQG7iQjIQuC4Bku"),
-    voiceIds: clean(process.env.ELEVENLABS_VOICE_IDS || process.env.ELEVENLABS_VOICE_ID || "pFZP5JQG7iQjIQuC4Bku").split(",").map((item) => clean(item)).filter(Boolean)
+    voiceIds: clean(process.env.ELEVENLABS_VOICE_IDS || process.env.ELEVENLABS_VOICE_ID || "pFZP5JQG7iQjIQuC4Bku").split(",").map((item) => clean(item)).filter(Boolean),
+    maleVoiceIds: clean(process.env.ELEVENLABS_MALE_VOICE_IDS || "").split(",").map((item) => clean(item)).filter(Boolean),
+    femaleVoiceIds: clean(process.env.ELEVENLABS_FEMALE_VOICE_IDS || process.env.ELEVENLABS_VOICE_IDS || process.env.ELEVENLABS_VOICE_ID || "pFZP5JQG7iQjIQuC4Bku").split(",").map((item) => clean(item)).filter(Boolean)
   },
   pricing: {
     storyInputUsdPer1MTokens: numberEnv("STORY_INPUT_USD_PER_1M_TOKENS", 0.4),
@@ -87,6 +91,12 @@ export const config = {
     dailyPartUpload: boolEnv("DAILY_PART_UPLOAD_ENABLED", false),
     retryMinutes: Math.max(1, Math.floor(numberEnv("PART_UPLOAD_RETRY_MINUTES", 15))),
     accountName: clean(process.env.SOCIAL_ACCOUNT_NAME || "memorimisteri")
+  },
+  github: {
+    workflowToken: process.env.MISTIS_GITHUB_WORKFLOW_TOKEN || process.env.GITHUB_WORKFLOW_TOKEN || "",
+    repo: clean(process.env.MISTIS_GITHUB_REPO || process.env.GITHUB_REPOSITORY || "emsabiq/memorimisteri"),
+    workflowId: clean(process.env.MISTIS_GITHUB_WORKFLOW_ID || "mistis-daily-part.yml"),
+    workflowRef: clean(process.env.MISTIS_GITHUB_WORKFLOW_REF || process.env.VERCEL_GIT_COMMIT_REF || "master")
   },
   ftp: {
     driver: clean(process.env.UPLOAD_DRIVER || "auto").toLowerCase(),
@@ -138,6 +148,8 @@ export function publicConfig() {
       ttsModel: config.openai.ttsModel,
       ttsVoice: config.openai.ttsVoice,
       ttsVoices: config.openai.ttsVoices,
+      ttsMaleVoices: config.openai.ttsMaleVoices,
+      ttsFemaleVoices: config.openai.ttsFemaleVoices,
       openaiTranscribeModel: config.openai.transcribeModel,
       elevenlabs: Boolean(config.elevenlabs.apiKey),
       elevenlabsModel: config.elevenlabs.model
@@ -152,6 +164,12 @@ export function publicConfig() {
       facebookReady: bool(config.facebook.pageId && (config.facebook.accessToken || config.facebook.userAccessToken)),
       instagramReady: bool(config.instagram.igUserId && config.instagram.accessToken),
       threadsReady: bool(config.threads.userId && config.threads.accessToken)
+    },
+    github: {
+      workflowDispatch: Boolean(config.github.workflowToken && config.github.repo && config.github.workflowId),
+      repo: config.github.repo,
+      workflowId: config.github.workflowId,
+      workflowRef: config.github.workflowRef
     },
     submissions: {
       minTextChars: config.submissions.minTextChars,

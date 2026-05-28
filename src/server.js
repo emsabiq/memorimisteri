@@ -151,6 +151,14 @@ app.post("/api/stories/full", async (req, res, next) => {
   }
 });
 
+app.post("/api/workflows/mistis-daily-part", async (req, res, next) => {
+  try {
+    res.status(202).json(await dispatchDailyPartWorkflow(req.body || {}));
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.post("/api/stories/:id/images", async (req, res, next) => {
   try {
     const story = await requireStory(req.params.id);
@@ -241,6 +249,52 @@ function httpError(message, status = 500) {
   const error = new Error(message);
   error.status = status;
   return error;
+}
+
+async function dispatchDailyPartWorkflow(body = {}) {
+  const repo = config.github.repo;
+  const workflowId = config.github.workflowId;
+  const ref = config.github.workflowRef || "master";
+  const token = config.github.workflowToken;
+  if (!token) throw httpError("MISTIS_GITHUB_WORKFLOW_TOKEN belum diatur untuk menjalankan workflow dari dashboard.", 409);
+  if (!/^[^/\s]+\/[^/\s]+$/.test(repo)) throw httpError("MISTIS_GITHUB_REPO harus berbentuk owner/repo.", 500);
+
+  const inputs = {
+    ignore_today_guard: "true",
+    force_new_part: body.forceNewPart ? "true" : "false",
+    part_number: cleanWorkflowInput(body.partNumber || "next")
+  };
+  const url = `https://api.github.com/repos/${repo}/actions/workflows/${encodeURIComponent(workflowId)}/dispatches`;
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      Accept: "application/vnd.github+json",
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+      "X-GitHub-Api-Version": "2022-11-28"
+    },
+    body: JSON.stringify({ ref, inputs })
+  });
+
+  if (!response.ok) {
+    const detail = await response.text();
+    throw httpError(`Gagal menjalankan workflow GitHub: HTTP ${response.status} ${detail.slice(0, 240)}`, 502);
+  }
+
+  return {
+    ok: true,
+    workflow: workflowId,
+    repo,
+    ref,
+    inputs,
+    actionsUrl: `https://github.com/${repo}/actions/workflows/${workflowId}`,
+    dispatchedAt: nowIso()
+  };
+}
+
+function cleanWorkflowInput(value) {
+  const text = String(value || "").trim();
+  return text || "next";
 }
 
 function escapeHtml(value) {
