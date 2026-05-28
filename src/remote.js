@@ -6,7 +6,48 @@ import SftpClient from "ssh2-sftp-client";
 import { config, paths } from "./config.js";
 
 export function publicBaseUrl() {
-  return String(config.publicBaseUrl || "").replace(/\/+$/g, "");
+  return canonicalPublicUrl(config.publicBaseUrl);
+}
+
+export function canonicalPublicUrl(value) {
+  const raw = String(value || "").trim().replace(/\/+$/g, "");
+  if (!raw) return "";
+  try {
+    const url = new URL(raw);
+    if (url.hostname === "emsa.pro") url.hostname = "www.emsa.pro";
+    return url.toString().replace(/\/+$/g, "");
+  } catch {
+    return raw.replace(/^https:\/\/emsa\.pro\b/i, "https://www.emsa.pro");
+  }
+}
+
+export async function waitForPublicAsset(assetUrl, options = {}) {
+  const attempts = Math.max(1, Number(options.attempts || 18));
+  const delayMs = Math.max(1000, Number(options.delayMs || 10000));
+  const minimumBytes = Math.max(1, Number(options.minimumBytes || 1024));
+  let currentUrl = canonicalPublicUrl(assetUrl);
+  let lastError = "";
+
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      const response = await fetch(currentUrl, {
+        method: "GET",
+        redirect: "follow",
+        headers: { Range: "bytes=0-1023", "Cache-Control": "no-cache" }
+      });
+      const length = Number(response.headers.get("content-length") || 0);
+      const type = String(response.headers.get("content-type") || "").toLowerCase();
+      if ((response.ok || response.status === 206) && length >= minimumBytes && (!options.contentType || type.includes(options.contentType))) {
+        return canonicalPublicUrl(response.url || currentUrl);
+      }
+      lastError = `HTTP ${response.status} ${type || ""} ${length || ""}`.trim();
+    } catch (error) {
+      lastError = error.message;
+    }
+    await new Promise((resolve) => setTimeout(resolve, delayMs));
+  }
+
+  throw new Error(`Asset publik belum siap untuk Meta fetch: ${currentUrl} (${lastError})`);
 }
 
 export function remoteEnabled() {

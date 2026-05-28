@@ -8,6 +8,26 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+async function retryFacebookMediaFetch(label, fn, attempts = 8) {
+  let lastError;
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      return await fn();
+    } catch (error) {
+      lastError = error;
+      if (!isFacebookMediaFetchRetry(error) || attempt === attempts) break;
+      const waitMs = Math.min(120000, 20000 + (attempt * 15000));
+      console.warn(`${label} gagal (${attempt}/${attempts}), retry ${Math.round(waitMs / 1000)}s: ${error.message}`);
+      await sleep(waitMs);
+    }
+  }
+  throw lastError;
+}
+
+function isFacebookMediaFetchRetry(error) {
+  return /429|too many requests|fileurlprocessingerror|unable to fetch media|temporarily unavailable|econnreset|timeout|5\d\d/i.test(String(error?.message || error || ""));
+}
+
 async function fetchJson(url, options = {}) {
   const response = await fetch(url, options);
   const text = await response.text();
@@ -55,9 +75,19 @@ export async function publishToSocials({ videoUrl, title, description, coverUrl,
       result.errors.threads = error.message;
     }
   }
-  result.ok = Boolean(result.facebook?.ok || result.instagram?.ok || result.threads?.ok);
-  if (!result.ok && Object.keys(result.errors).length) {
-    throw new Error(Object.entries(result.errors).map(([key, value]) => `${key}: ${value}`).join("; "));
+  const enabled = [
+    config.automation.facebook ? "facebook" : "",
+    config.automation.instagram ? "instagram" : "",
+    config.automation.threads ? "threads" : ""
+  ].filter(Boolean);
+  const required = config.automation.facebook ? ["facebook"] : enabled;
+  result.ok = required.length ? required.some((key) => result[key]?.ok) : false;
+  if (!result.ok) {
+    const relevantErrors = Object.entries(result.errors)
+      .filter(([key]) => required.includes(key))
+      .map(([key, value]) => `${key}: ${value}`);
+    const allErrors = Object.entries(result.errors).map(([key, value]) => `${key}: ${value}`);
+    throw new Error((relevantErrors.length ? relevantErrors : allErrors).join("; ") || `Required social upload failed: ${required.join(", ")}`);
   }
   return result;
 }
@@ -80,22 +110,41 @@ async function publishToFacebook({ videoUrl, title, description }) {
   }
   if (!videoUrl) throw new Error("Facebook butuh public video URL.");
   const token = await resolvePageAccessToken();
+  const settleSeconds = Number(process.env.FACEBOOK_MEDIA_SETTLE_SECONDS || 90);
+  if (Number.isFinite(settleSeconds) && settleSeconds > 0) {
+    console.log(`Menunggu ${settleSeconds}s supaya file publik siap difetch Facebook.`);
+    await sleep(Math.min(240, settleSeconds) * 1000);
+  }
   if (config.facebook.mediaType === "video") {
-    const body = new URLSearchParams({
-      access_token: token,
-      file_url: videoUrl,
-      title: clean(title).slice(0, 100),
-      description: clean(description).slice(0, 4900),
-      published: String(config.facebook.videoState).toUpperCase() === "PUBLISHED" ? "true" : "false"
-    });
-    const data = await fetchJson(graphVideoUrl(`${config.facebook.pageId}/videos`), {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body
-    });
-    return { ok: Boolean(data.id), type: "facebook_video", id: clean(data.id), url: data.id ? `https://www.facebook.com/${data.id}` : "" };
+    return publishFacebookVideo({ token, videoUrl, title, description });
   }
 
+  try {
+    return await publishFacebookReel({ token, videoUrl, description });
+  } catch (error) {
+    console.warn(`Facebook Reel gagal, fallback ke Page video: ${error.message}`);
+    const fallback = await publishFacebookVideo({ token, videoUrl, title, description });
+    return { ...fallback, fallbackFrom: "facebook_reel", reelError: error.message };
+  }
+}
+
+async function publishFacebookVideo({ token, videoUrl, title, description }) {
+  const body = new URLSearchParams({
+    access_token: token,
+    file_url: videoUrl,
+    title: clean(title).slice(0, 100),
+    description: clean(description).slice(0, 4900),
+    published: String(config.facebook.videoState).toUpperCase() === "PUBLISHED" ? "true" : "false"
+  });
+  const data = await retryFacebookMediaFetch("Facebook video file_url", () => fetchJson(graphVideoUrl(`${config.facebook.pageId}/videos`), {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body
+  }));
+  return { ok: Boolean(data.id), type: "facebook_video", id: clean(data.id), url: data.id ? `https://www.facebook.com/${data.id}` : "" };
+}
+
+async function publishFacebookReel({ token, videoUrl, description }) {
   const startUrl = new URL(graphUrl(`${config.facebook.pageId}/video_reels`));
   startUrl.searchParams.set("access_token", token);
   startUrl.searchParams.set("upload_phase", "start");
@@ -103,17 +152,17 @@ async function publishToFacebook({ videoUrl, title, description }) {
   const uploadUrl = clean(started.upload_url);
   const videoId = clean(started.video_id);
   if (!uploadUrl || !videoId) throw new Error("Facebook tidak mengembalikan upload_url/video_id.");
-  await fetchJson(uploadUrl, {
+  await retryFacebookMediaFetch("Facebook Reel transfer", () => fetchJson(uploadUrl, {
     method: "POST",
     headers: { Authorization: `OAuth ${token}`, file_url: videoUrl }
-  });
+  }));
   const finishUrl = new URL(graphUrl(`${config.facebook.pageId}/video_reels`));
   finishUrl.searchParams.set("access_token", token);
   finishUrl.searchParams.set("upload_phase", "finish");
   finishUrl.searchParams.set("video_id", videoId);
   finishUrl.searchParams.set("video_state", config.facebook.videoState || "PUBLISHED");
   finishUrl.searchParams.set("description", clean(description).slice(0, 4900));
-  await fetchJson(finishUrl, { method: "POST" });
+  await retryFacebookMediaFetch("Facebook Reel finish", () => fetchJson(finishUrl, { method: "POST" }));
   return { ok: true, type: "facebook_reel", id: videoId, url: `https://www.facebook.com/reel/${videoId}` };
 }
 

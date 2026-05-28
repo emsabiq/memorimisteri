@@ -1,7 +1,7 @@
 import { config, ensureProjectDirs } from "./config.js";
 import { pathToFileURL } from "node:url";
 import { generateFullStory } from "./pipeline.js";
-import { absolutizeGeneratedUrls, publicBaseUrl, remoteEnabled, uploadPublicSite, uploadStateFiles, uploadStoryAssets } from "./remote.js";
+import { absolutizeGeneratedUrls, publicBaseUrl, remoteEnabled, uploadPublicSite, uploadStateFiles, uploadStoryAssets, waitForPublicAsset } from "./remote.js";
 import { publishToSocials } from "./social.js";
 import { listStories, saveStories, saveStory } from "./storage.js";
 import { nowIso } from "./util.js";
@@ -11,6 +11,7 @@ ensureProjectDirs();
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const result = await uploadNextPart();
   console.log(JSON.stringify(result, null, 2));
+  if (!result.ok && !result.skipped) process.exitCode = 1;
 }
 
 export async function uploadNextPart() {
@@ -19,8 +20,14 @@ export async function uploadNextPart() {
   }
 
   await importRemoteStories();
-  const stories = await listStories();
+  let stories = await listStories();
   const forceNewPart = truthyEnv("MISTIS_FORCE_NEW_PART");
+  const resetEpisodeState = forceNewPart && forcedPartNumber() === 1 && truthyEnv("MISTIS_RESET_EPISODE_STATE");
+  if (resetEpisodeState) {
+    console.log("MISTIS_RESET_EPISODE_STATE=true, clearing local imported story state before generating a clean part 1.");
+    await saveStories([]);
+    stories = [];
+  }
   const dueRetry = stories.find((story) => story.status === "rendered" && story.publish?.state === "failed" && isDue(story.publish.nextAttemptAt) && isPublishReady(story));
   if (!forceNewPart && !dueRetry && uploadedToday(stories)) {
     return { ok: false, skipped: true, reason: "Part hari ini sudah uploaded. Retry gagal tetap akan diproses saat due." };
@@ -44,14 +51,21 @@ export async function uploadNextPart() {
       await uploadPublicSite();
       const uploaded = absolutizeGeneratedUrls(candidate);
       Object.assign(candidate, uploaded);
-      await saveStory(candidate);
+      await persistCandidate(candidate, resetEpisodeState);
       await uploadStoryAssets(candidate);
     }
 
-    const videoUrl = candidate.assets?.video?.url || "";
+    let videoUrl = candidate.assets?.video?.url || "";
     if (!/^https?:\/\//i.test(videoUrl)) {
       throw new Error("Video belum punya public URL. Isi PUBLIC_BASE_URL dan FTP/SFTP agar Meta bisa fetch video.");
     }
+    videoUrl = await waitForPublicAsset(videoUrl, { contentType: "video", minimumBytes: 1024 });
+    candidate.assets.video.url = videoUrl;
+    if (candidate.assets?.images?.[0]?.url) {
+      candidate.assets.images[0].url = await waitForPublicAsset(candidate.assets.images[0].url, { contentType: "image", minimumBytes: 256 }).catch(() => candidate.assets.images[0].url);
+    }
+    await persistCandidate(candidate, resetEpisodeState);
+    if (remoteEnabled()) await uploadStateFiles();
 
     const published = await publishToSocials({
       videoUrl,
@@ -69,7 +83,7 @@ export async function uploadNextPart() {
       nextAttemptAt: ""
     };
     candidate.updatedAt = nowIso();
-    await saveStory(candidate);
+    await persistCandidate(candidate, resetEpisodeState);
     if (remoteEnabled()) await uploadStateFiles();
     return { ok: true, storyId: candidate.id, title: candidate.title, part: partKey(candidate), published };
   } catch (error) {
@@ -83,7 +97,7 @@ export async function uploadNextPart() {
       nextAttemptAt: new Date(Date.now() + config.automation.retryMinutes * 60000).toISOString()
     };
     candidate.updatedAt = nowIso();
-    await saveStory(candidate);
+    await persistCandidate(candidate, resetEpisodeState);
     if (remoteEnabled()) {
       await uploadStateFiles().catch((syncError) => {
         console.warn(`State remote belum tersinkron setelah upload gagal: ${syncError.message}`);
@@ -91,6 +105,14 @@ export async function uploadNextPart() {
     }
     return { ok: false, storyId: candidate.id, title: candidate.title, part: partKey(candidate), error: error.message, nextAttemptAt: candidate.publish.nextAttemptAt };
   }
+}
+
+async function persistCandidate(candidate, resetEpisodeState) {
+  if (resetEpisodeState) {
+    await saveStories([candidate]);
+    return candidate;
+  }
+  return saveStory(candidate);
 }
 
 async function importRemoteStories() {

@@ -7,8 +7,9 @@ import { clamp, nowIso, safeFilename, splitLines } from "./util.js";
 const width = 1080;
 const height = 1920;
 const fps = 30;
-const scholarRegularFont = process.env.SCHOLAR_FONT_PATH || "C:/Users/Lenovo/AppData/Local/Microsoft/Windows/Fonts/scholar-regular.otf";
-const scholarItalicFont = process.env.SCHOLAR_ITALIC_FONT_PATH || "C:/Users/Lenovo/AppData/Local/Microsoft/Windows/Fonts/scholar-italic.otf";
+const bundledFontDir = path.join(paths.publicDir, "assets", "fonts");
+const scholarRegularFont = process.env.SCHOLAR_FONT_PATH || path.join(bundledFontDir, "scholar-regular.otf");
+const scholarItalicFont = process.env.SCHOLAR_ITALIC_FONT_PATH || path.join(bundledFontDir, "scholar-italic.otf");
 const scholarFontName = process.env.SUBTITLE_FONT_FAMILY || "Scholar";
 const scholarFontsDir = path.dirname(scholarRegularFont);
 const transitionDuration = 0.45;
@@ -23,6 +24,9 @@ const subtitleOffsetSeconds = Number.isFinite(Number(process.env.SUBTITLE_OFFSET
   ? Number(process.env.SUBTITLE_OFFSET_SECONDS)
   : 0.02;
 const producerAudioDir = process.env.HORROR_AUDIO_DIR || "C:/Users/Lenovo/Downloads";
+const bundledAudioDir = path.join(paths.publicDir, "assets", "audio", "horror");
+const producerMusicDirs = [path.join(bundledAudioDir, "music"), producerAudioDir];
+const producerSfxDirs = [path.join(bundledAudioDir, "sfx"), producerAudioDir];
 const producerMusicNames = [
   "Puncak Mencekam.mp3",
   "Hawa Dingin Gaib.mp3",
@@ -39,8 +43,8 @@ const jumpScareSfxNames = [
   "cartoon-music-game-sfx-dynamite-exploding-525380.mp3"
 ];
 const producerMusicVolume = Number.isFinite(Number(process.env.PRODUCER_MUSIC_VOLUME))
-  ? clamp(Number(process.env.PRODUCER_MUSIC_VOLUME), 0.04, 0.42)
-  : 0.28;
+  ? clamp(Number(process.env.PRODUCER_MUSIC_VOLUME), 0.08, 0.65)
+  : 0.42;
 
 export async function renderDraftVideo(story) {
   const workDir = path.join(paths.storyboardDir, story.id);
@@ -751,38 +755,38 @@ function ffmpegFilterPath(filePath) {
     .replace(/'/g, "\\'");
 }
 
-async function resolveAudioAssetPaths(names, envName) {
+async function resolveAudioAssetPaths(names, envName, searchDirs = producerMusicDirs) {
   const configured = String((envName && process.env[envName]) || "")
     .split(";")
     .map((item) => item.trim())
     .filter(Boolean);
   const candidates = configured.length
     ? configured
-    : names.map((name) => path.join(producerAudioDir, name));
+    : searchDirs.flatMap((dir) => names.map((name) => path.join(dir, name)));
   const existing = [];
   for (const candidate of candidates) {
     try {
       await fs.access(candidate);
-      existing.push(candidate);
+      if (!existing.includes(candidate)) existing.push(candidate);
     } catch {
-      // Missing local audio is fine; renderer falls back to generated beds.
+      // Missing producer audio is fine; renderer falls back to generated beds.
     }
   }
   return existing;
 }
 
 async function makeHorrorMusicBed({ outputPath, duration, seedText }) {
-  const producerFiles = await resolveAudioAssetPaths(producerMusicNames, "HORROR_MUSIC_FILES");
+  const producerFiles = await resolveAudioAssetPaths(producerMusicNames, "HORROR_MUSIC_FILES", producerMusicDirs);
   if (producerFiles.length) {
-    await makeProducerMusicBed({ outputPath, duration, sourcePaths: selectProducerMusicFiles(producerFiles, seedText) });
+    await makeProducerMusicBed({ outputPath, duration, sourcePaths: selectProducerMusicFiles(producerFiles, seedText), seedText });
     return outputPath;
   }
-  return makeSyntheticHorrorMusicBed({ outputPath, duration });
+  return makeSyntheticHorrorMusicBed({ outputPath, duration, seedText });
 }
 
-async function makeProducerMusicBed({ outputPath, duration, sourcePaths }) {
+async function makeProducerMusicBed({ outputPath, duration, sourcePaths, seedText }) {
   const selected = sourcePaths.filter(Boolean).slice(0, 3);
-  if (!selected.length) return makeSyntheticHorrorMusicBed({ outputPath, duration });
+  if (!selected.length) return makeSyntheticHorrorMusicBed({ outputPath, duration, seedText });
 
   const total = Math.max(1, Number(duration || 1));
   const tensionStart = Math.max(4, total * 0.34);
@@ -836,11 +840,18 @@ function selectProducerMusicFiles(sourcePaths, seedText) {
   ].filter((item, index, array) => item && array.indexOf(item) === index);
 }
 
-async function makeSyntheticHorrorMusicBed({ outputPath, duration }) {
+async function makeSyntheticHorrorMusicBed({ outputPath, duration, seedText }) {
   const sampleRate = 44100;
   const sampleCount = Math.max(1, Math.ceil(Number(duration || 1) * sampleRate));
   const buffer = Buffer.alloc(44 + sampleCount * 2);
-  const roots = [43.65, 46.25, 49.0, 41.2];
+  const seed = hashText(seedText || outputPath);
+  const rootSets = [
+    [43.65, 46.25, 49.0, 41.2],
+    [36.71, 41.2, 55.0, 61.74],
+    [49.0, 51.91, 58.27, 43.65],
+    [38.89, 46.25, 65.41, 73.42]
+  ];
+  const roots = rootSets[seed % rootSets.length];
 
   buffer.write("RIFF", 0);
   buffer.writeUInt32LE(36 + sampleCount * 2, 4);
@@ -862,26 +873,30 @@ async function makeSyntheticHorrorMusicBed({ outputPath, duration }) {
     const fadeIn = Math.min(1, t / 1.2);
     const fadeOut = Math.min(1, Math.max(0, (total - t) / 1.4));
     const fade = fadeIn * fadeOut;
-    const root = roots[Math.floor(t / 7.5) % roots.length];
-    const tremolo = 0.62 + 0.38 * Math.sin(2 * Math.PI * 0.11 * t);
+    const root = roots[(Math.floor(t / 6.8) + seed) % roots.length];
+    const tremolo = 0.58 + 0.42 * Math.sin(2 * Math.PI * (0.09 + (seed % 7) * 0.011) * t);
     const drone =
-      0.32 * Math.sin(2 * Math.PI * root * t) +
-      0.22 * Math.sin(2 * Math.PI * root * 1.05946 * t) +
-      0.18 * Math.sin(2 * Math.PI * root * 2.01 * t) +
-      0.1 * Math.sin(2 * Math.PI * root * 3.03 * t);
+      0.38 * Math.sin(2 * Math.PI * root * t) +
+      0.28 * Math.sin(2 * Math.PI * root * 1.05946 * t) +
+      0.22 * Math.sin(2 * Math.PI * root * 2.01 * t) +
+      0.13 * Math.sin(2 * Math.PI * root * 3.03 * t);
     const pad =
-      0.11 * Math.sin(2 * Math.PI * 146.83 * t + Math.sin(t * 0.37) * 0.7) +
-      0.08 * Math.sin(2 * Math.PI * 311.13 * t + Math.sin(t * 0.19) * 0.9);
-    const pulsePhase = t % 3.15;
+      0.16 * Math.sin(2 * Math.PI * (130.81 + (seed % 5) * 7.5) * t + Math.sin(t * 0.37) * 0.7) +
+      0.12 * Math.sin(2 * Math.PI * (261.63 + (seed % 3) * 15.2) * t + Math.sin(t * 0.19) * 0.9);
+    const pulsePhase = t % (2.55 + (seed % 6) * 0.17);
     const pulse = pulsePhase < 0.38
-      ? Math.sin(2 * Math.PI * (58 + pulsePhase * 28) * t) * Math.exp(-pulsePhase * 7.5)
+      ? Math.sin(2 * Math.PI * (62 + pulsePhase * 42) * t) * Math.exp(-pulsePhase * 7.0)
       : 0;
-    const stingPhase = t % 11.2;
-    const sting = stingPhase < 1.1
-      ? Math.sin(2 * Math.PI * (392 + stingPhase * 120) * t) * Math.exp(-stingPhase * 4.5)
+    const stingPhase = (t + (seed % 4)) % 9.6;
+    const sting = stingPhase < 1.15
+      ? Math.sin(2 * Math.PI * (392 + stingPhase * 190) * t) * Math.exp(-stingPhase * 4.1)
       : 0;
-    const noise = (Math.sin(t * 1297.13) * Math.sin(t * 313.71) * Math.sin(t * 771.9)) * 0.08;
-    const value = Math.tanh(((drone * tremolo) + pad + (pulse * 0.82) + (sting * 0.3) + noise) * 1.15) * fade * 0.72;
+    const heartbeatPhase = t % 1.15;
+    const heartbeat = heartbeatPhase < 0.12
+      ? Math.sin(2 * Math.PI * 72 * t) * Math.exp(-heartbeatPhase * 14)
+      : 0;
+    const noise = (Math.sin(t * 1297.13) * Math.sin(t * 313.71) * Math.sin(t * 771.9)) * 0.11;
+    const value = Math.tanh(((drone * tremolo) + pad + (pulse * 0.92) + (sting * 0.42) + (heartbeat * 0.56) + noise) * 1.28) * fade * 0.9;
     buffer.writeInt16LE(Math.max(-32767, Math.min(32767, Math.round(value * 32767))), 44 + index * 2);
   }
 
@@ -917,7 +932,7 @@ async function makeFallbackAudio({ outputPath, workDir, duration, text, narratio
         "[6:a]volume=0.19,highpass=f=160,lowpass=f=780,tremolo=f=0.42:d=0.88,aecho=0.55:0.28:1180:0.22[a5]",
         "[7:a]volume=0.18,highpass=f=105,lowpass=f=620,tremolo=f=0.12:d=0.92,aecho=0.62:0.32:1420:0.28[m0]",
         "[8:a]volume=0.075,highpass=f=240,lowpass=f=1300,tremolo=f=5.2:d=0.42,aecho=0.38:0.22:520:0.16[m1]",
-        "[9:a]volume=1.56,highpass=f=32,lowpass=f=4200,aecho=0.5:0.28:1180:0.18[music]",
+        "[9:a]volume=2.05,highpass=f=32,lowpass=f=4200,aecho=0.5:0.28:1180:0.18[music]",
         `[n][a0][a1][a2][a3][a4][a5][m0][m1][music]amix=inputs=10:duration=longest:normalize=0,lowpass=f=7200,volume=1.08,alimiter=limit=0.95,afade=t=in:st=0:d=0.25,afade=t=out:st=${fadeOutAt}:d=0.65[a]`
       ].join(";")
     : [
@@ -929,7 +944,7 @@ async function makeFallbackAudio({ outputPath, workDir, duration, text, narratio
         "[5:a]volume=0.23,highpass=f=160,lowpass=f=780,tremolo=f=0.42:d=0.88,aecho=0.55:0.28:1180:0.22[a5]",
         "[6:a]volume=0.2,highpass=f=105,lowpass=f=620,tremolo=f=0.12:d=0.92,aecho=0.62:0.32:1420:0.28[m0]",
         "[7:a]volume=0.085,highpass=f=240,lowpass=f=1300,tremolo=f=5.2:d=0.42,aecho=0.38:0.22:520:0.16[m1]",
-        "[8:a]volume=1.62,highpass=f=32,lowpass=f=4200,aecho=0.5:0.28:1180:0.18[music]",
+        "[8:a]volume=2.08,highpass=f=32,lowpass=f=4200,aecho=0.5:0.28:1180:0.18[music]",
         `[a0][a1][a2][a3][a4][a5][m0][m1][music]amix=inputs=9:duration=longest:normalize=0,lowpass=f=6200,volume=1.28,alimiter=limit=0.95,afade=t=in:st=0:d=0.45,afade=t=out:st=${fadeOutAt}:d=0.65[a]`
       ].join(";");
 
@@ -1034,7 +1049,7 @@ async function makeTtsHorrorMix({ inputPath, outputPath, workDir, duration, narr
     "[6:a]volume=0.1,highpass=f=160,lowpass=f=780,tremolo=f=0.42:d=0.88,aecho=0.55:0.28:1180:0.22[a5]",
     "[7:a]volume=0.1,highpass=f=105,lowpass=f=620,tremolo=f=0.12:d=0.92,aecho=0.62:0.32:1420:0.28[m0]",
     "[8:a]volume=0.045,highpass=f=240,lowpass=f=1300,tremolo=f=5.2:d=0.42,aecho=0.38:0.22:520:0.16[m1]",
-    "[9:a]volume=1.56,highpass=f=32,lowpass=f=4200,aecho=0.5:0.28:1180:0.18[music]",
+    "[9:a]volume=2.05,highpass=f=32,lowpass=f=4200,aecho=0.5:0.28:1180:0.18[music]",
     `[n][a0][a1][a2][a3][a4][a5][m0][m1][music]amix=inputs=10:duration=longest:normalize=0,lowpass=f=7400,volume=1.08,alimiter=limit=0.95,afade=t=in:st=0:d=0.2,afade=t=out:st=${fadeOutAt}:d=0.65[a]`
   ].join(";");
 
@@ -1126,7 +1141,7 @@ async function addJumpScareSfx({ basePath, outputPath, workDir, duration, jumpSc
     "-i",
     sfxPath,
     "-filter_complex",
-    "[0:a]volume=1.0[base];[1:a]volume=1.0[sfx];[base][sfx]amix=inputs=2:duration=longest:normalize=0,alimiter=limit=0.96[a]",
+    "[0:a]volume=1.0[base];[1:a]volume=1.35[sfx];[base][sfx]amix=inputs=2:duration=longest:normalize=0,alimiter=limit=0.96[a]",
     "-map",
     "[a]",
     "-t",
@@ -1142,23 +1157,30 @@ async function addJumpScareSfx({ basePath, outputPath, workDir, duration, jumpSc
 }
 
 async function makeJumpScareSfxBed({ outputPath, duration, jumpScareAt }) {
-  const sourcePaths = await resolveAudioAssetPaths(jumpScareSfxNames, "JUMPSCARE_SFX_FILES");
+  const sourcePaths = await resolveAudioAssetPaths(jumpScareSfxNames, "JUMPSCARE_SFX_FILES", producerSfxDirs);
   if (!sourcePaths.length) return makeSyntheticJumpScareSfxBed({ outputPath, duration, jumpScareAt });
 
   const total = Math.max(1, Number(duration || 1));
-  const start = clamp(Number(jumpScareAt || total - 3), 0.2, Math.max(0.2, total - 0.9));
+  const endStart = clamp(Number(jumpScareAt || total - 3), 0.2, Math.max(0.2, total - 0.9));
+  const seed = hashText(sourcePaths.join("|"));
+  const midBase = total * (0.43 + ((seed % 11) / 100));
+  const midStart = clamp(midBase, 1.2, Math.max(1.2, endStart - 2.4));
+  const selected = selectSfxFiles(sourcePaths, seed);
   const args = ["-y"];
-  for (const sourcePath of sourcePaths) args.push("-i", sourcePath);
+  for (const sourcePath of selected) args.push("-i", sourcePath);
 
-  const offsets = [-0.08, 0, 0.14];
-  const lengths = [1.7, 1.05, 1.35];
-  const volumes = [0.62, 0.58, 0.34];
-  const filters = sourcePaths.map((_, index) => {
-    const offsetMs = Math.max(0, Math.round((start + (offsets[index] || 0)) * 1000));
-    return `[${index}:a]atrim=0:${lengths[index] || 1.1},asetpts=PTS-STARTPTS,volume=${volumes[index] || 0.38},highpass=f=75,lowpass=f=9200,afade=t=out:st=${Math.max(0.25, (lengths[index] || 1.1) - 0.22).toFixed(2)}:d=0.22,adelay=${offsetMs}:all=1[s${index}]`;
+  const events = [
+    { input: 1 % selected.length, start: midStart, length: 1.15, volume: 0.46, highpass: 95, lowpass: 8200 },
+    { input: 0, start: endStart - 0.08, length: 1.75, volume: 0.86, highpass: 70, lowpass: 9600 },
+    { input: 2 % selected.length, start: endStart + 0.16, length: 1.2, volume: 0.42, highpass: 100, lowpass: 7600 }
+  ];
+  const filters = events.map((event, index) => {
+    const offsetMs = Math.max(0, Math.round(clamp(event.start, 0.2, Math.max(0.2, total - 0.2)) * 1000));
+    const fadeStart = Math.max(0.25, event.length - 0.22).toFixed(2);
+    return `[${event.input}:a]atrim=0:${event.length.toFixed(2)},asetpts=PTS-STARTPTS,volume=${event.volume.toFixed(2)},highpass=f=${event.highpass},lowpass=f=${event.lowpass},afade=t=out:st=${fadeStart}:d=0.22,adelay=${offsetMs}:all=1[s${index}]`;
   });
-  const labels = sourcePaths.map((_, index) => `[s${index}]`).join("");
-  filters.push(`${labels}amix=inputs=${sourcePaths.length}:duration=longest:normalize=0,alimiter=limit=0.9[a]`);
+  const labels = events.map((_, index) => `[s${index}]`).join("");
+  filters.push(`${labels}amix=inputs=${events.length}:duration=longest:normalize=0,alimiter=limit=0.92[a]`);
 
   await runFfmpeg([
     ...args,
@@ -1178,10 +1200,19 @@ async function makeJumpScareSfxBed({ outputPath, duration, jumpScareAt }) {
   return outputPath;
 }
 
+function selectSfxFiles(sourcePaths, seed) {
+  if (sourcePaths.length <= 3) return sourcePaths;
+  return [0, 2, 5]
+    .map((offset) => sourcePaths[(seed + offset) % sourcePaths.length])
+    .filter((item, index, array) => item && array.indexOf(item) === index);
+}
+
 async function makeSyntheticJumpScareSfxBed({ outputPath, duration, jumpScareAt }) {
   const total = Math.max(1, Number(duration || 1));
   const start = clamp(Number(jumpScareAt || total - 3), 0.2, Math.max(0.2, total - 0.9));
+  const midStart = clamp(total * 0.48, 1.2, Math.max(1.2, start - 2.4));
   const startMs = Math.round(start * 1000);
+  const midMs = Math.round(midStart * 1000);
   await runFfmpeg([
     "-y",
     "-f",
@@ -1197,7 +1228,7 @@ async function makeSyntheticJumpScareSfxBed({ outputPath, duration, jumpScareAt 
     "-i",
     "sine=frequency=880:sample_rate=44100",
     "-filter_complex",
-    `[0:a]highpass=f=500,lowpass=f=7000,volume=0.5,adelay=${startMs}:all=1[s0];[1:a]volume=0.35,aecho=0.5:0.25:110:0.18,adelay=${startMs + 80}:all=1[s1];[s0][s1]amix=inputs=2:duration=longest:normalize=0,alimiter=limit=0.86[a]`,
+    `[0:a]highpass=f=500,lowpass=f=7000,volume=0.34,adelay=${midMs}:all=1[s0];[0:a]highpass=f=500,lowpass=f=7600,volume=0.62,adelay=${startMs}:all=1[s1];[1:a]volume=0.42,aecho=0.5:0.25:110:0.18,adelay=${startMs + 80}:all=1[s2];[s0][s1][s2]amix=inputs=3:duration=longest:normalize=0,alimiter=limit=0.9[a]`,
     "-map",
     "[a]",
     "-t",
