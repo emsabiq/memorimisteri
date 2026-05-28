@@ -10,7 +10,7 @@
     "preflight": "node src/preflight.js",
     "deploy:site": "node src/deploy-site.js",
     "run:once": "node src/run-once.js",
-    "check": "node --check src/server.js && node --check src/story-engine.js && node --check src/render.js && node --check src/openai.js && node --check src/elevenlabs.js && node --check src/submissions.js && node --check src/pipeline.js && node --check src/remote.js && node --check src/social.js && node --check src/run-once.js && node --check src/preflight.js && node --check src/deploy-site.js",
+    "check": "node --check src/server.js && node --check src/story-engine.js && node --check src/render.js && node --check src/openai.js && node --check src/elevenlabs.js && node --check src/submissions.js && node --check src/pipeline.js && node --check src/remote.js && node --check src/social.js && node --check src/thumbnail.js && node --check src/run-once.js && node --check src/preflight.js && node --check src/deploy-site.js",
     "status": "node src/status.js"
   },
   "dependencies": {

@@ -162,8 +162,9 @@ function buildRenderScenes(story, targetDuration) {
 
 function renderContentDuration(story, sourceAudioDuration) {
   const platformMaxDuration = Math.max(45, Number(config.instagram?.maxDurationSec || 90));
-  const requestedDuration = clamp(Number(story.input?.durationSec || 60), 45, platformMaxDuration);
-  const maxContentDuration = Math.max(8, platformMaxDuration - introFreezeDuration - jumpScareDuration - endCardDuration);
+  const safeMaxDuration = Math.max(45, platformMaxDuration - 1.5);
+  const requestedDuration = clamp(Number(story.input?.durationSec || 60), 45, safeMaxDuration);
+  const maxContentDuration = Math.max(8, safeMaxDuration - introFreezeDuration - jumpScareDuration - endCardDuration);
   const targetContentDuration = Math.max(8, requestedDuration - introFreezeDuration - jumpScareDuration - endCardDuration);
   if (sourceAudioDuration > 0) {
     return Number(Math.min(Math.max(sourceAudioDuration, targetContentDuration), maxContentDuration).toFixed(2));

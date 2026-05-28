@@ -18,6 +18,31 @@ on:
         required: false
         default: true
         type: boolean
+      story_idea:
+        description: Optional explicit story idea for this run.
+        required: false
+        default: ""
+        type: string
+      episode_title:
+        description: Optional episode title override.
+        required: false
+        default: ""
+        type: string
+      theme:
+        description: Optional theme key: rumah, kos, jalan, pendaki, mimpi.
+        required: false
+        default: ""
+        type: string
+      duration:
+        description: Optional target duration in seconds.
+        required: false
+        default: ""
+        type: string
+      scenes:
+        description: Optional scene count.
+        required: false
+        default: ""
+        type: string
   schedule:
     # Starts at 15:00 WIB (08:00 UTC), then retries every 15 minutes until late evening if the part fails.
     # The runner itself enforces one successful part per local day.
@@ -71,12 +96,12 @@ jobs:
       SUBTITLE_FONT_FAMILY: Scholar
       PRODUCER_MUSIC_VOLUME: ${{ secrets.PRODUCER_MUSIC_VOLUME || '0.42' }}
 
-      MISTIS_IDEA: ${{ secrets.MISTIS_IDEA }}
-      MISTIS_EPISODE_TITLE: ${{ secrets.MISTIS_EPISODE_TITLE }}
+      MISTIS_IDEA: ${{ github.event.inputs.story_idea || secrets.MISTIS_IDEA }}
+      MISTIS_EPISODE_TITLE: ${{ github.event.inputs.episode_title || secrets.MISTIS_EPISODE_TITLE }}
       MISTIS_TOTAL_PARTS: ${{ secrets.MISTIS_TOTAL_PARTS }}
-      MISTIS_THEME: ${{ secrets.MISTIS_THEME }}
-      MISTIS_DURATION: ${{ secrets.MISTIS_DURATION }}
-      MISTIS_SCENES: ${{ secrets.MISTIS_SCENES }}
+      MISTIS_THEME: ${{ github.event.inputs.theme || secrets.MISTIS_THEME }}
+      MISTIS_DURATION: ${{ github.event.inputs.duration || secrets.MISTIS_DURATION }}
+      MISTIS_SCENES: ${{ github.event.inputs.scenes || secrets.MISTIS_SCENES }}
       MISTIS_FORCE_NEW_PART: ${{ github.event.inputs.force_new_part || 'false' }}
       MISTIS_FORCE_PART_NUMBER: ${{ github.event.inputs.part_number || '1' }}
       MISTIS_RESET_EPISODE_STATE: ${{ github.event.inputs.reset_episode_state || 'false' }}
@@ -126,6 +151,10 @@ jobs:
             echo "force_new_part=${MISTIS_FORCE_NEW_PART:-false}"
             echo "force_part_number=${MISTIS_FORCE_PART_NUMBER:-1}"
             echo "reset_episode_state=${MISTIS_RESET_EPISODE_STATE:-false}"
+            echo "story_idea_configured=$([ -n "$MISTIS_IDEA" ] && echo yes || echo no)"
+            echo "theme=${MISTIS_THEME:-auto}"
+            echo "duration=${MISTIS_DURATION:-auto}"
+            echo "scenes=${MISTIS_SCENES:-auto}"
           } | tee github-run-logs/run-context.txt
 
       - uses: actions/setup-node@v6

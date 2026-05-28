@@ -64,6 +64,9 @@ export async function uploadNextPart() {
     if (candidate.assets?.images?.[0]?.url) {
       candidate.assets.images[0].url = await waitForPublicAsset(candidate.assets.images[0].url, { contentType: "image", minimumBytes: 256 }).catch(() => candidate.assets.images[0].url);
     }
+    if (candidate.assets?.thumbnail?.url) {
+      candidate.assets.thumbnail.url = await waitForPublicAsset(candidate.assets.thumbnail.url, { contentType: "image", minimumBytes: 256 }).catch(() => candidate.assets.thumbnail.url);
+    }
     await persistCandidate(candidate, resetEpisodeState);
     if (remoteEnabled()) await uploadStateFiles();
 
@@ -71,7 +74,7 @@ export async function uploadNextPart() {
       videoUrl,
       title: candidate.title,
       description: socialDescription(candidate),
-      coverUrl: candidate.assets?.images?.[0]?.url || "",
+      coverUrl: candidate.assets?.thumbnail?.url || candidate.assets?.images?.[0]?.url || "",
       durationSec: candidate.assets?.video?.durationSec || 0
     });
     candidate.publish = {

@@ -5,6 +5,7 @@ import { generateSceneImage, generateSpeech } from "./openai.js";
 import { renderDraftVideo } from "./render.js";
 import { createStoryDraft } from "./story-engine.js";
 import { listStories, saveStory } from "./storage.js";
+import { createTitleThumbnail } from "./thumbnail.js";
 import { nowIso } from "./util.js";
 
 export async function generateFullStory(input = {}, options = {}) {
@@ -13,6 +14,7 @@ export async function generateFullStory(input = {}, options = {}) {
   await saveStory(story);
   console.log(`Estimated paid generation cost before media calls: $${Number(story.cost?.totalUsd || 0).toFixed(5)}`);
   await ensureStoryImages(story, { warnings, strict: true });
+  await ensureTitleThumbnail(story, { warnings, strict: true });
   await ensureStoryAudio(story, { warnings, provider: input.ttsProvider || options.ttsProvider, force: true });
   await renderAndPersist(story);
   return { story, warnings };
@@ -45,6 +47,21 @@ export async function ensureStoryImages(story, options = {}) {
   }
 
   story.assets.images = sortImages(images);
+}
+
+export async function ensureTitleThumbnail(story, options = {}) {
+  const warnings = options.warnings || [];
+  try {
+    const thumbnail = await createTitleThumbnail(story);
+    if (!thumbnail) throw new Error("Belum ada gambar scene untuk thumbnail.");
+    story.assets.thumbnail = thumbnail;
+    story.updatedAt = nowIso();
+    await saveStory(story);
+  } catch (error) {
+    const message = `Thumbnail judul gagal: ${error.message}`;
+    if (options.strict) throw new Error(message);
+    warnings.push(message);
+  }
 }
 
 export async function ensureStoryAudio(story, options = {}) {

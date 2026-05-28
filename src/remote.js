@@ -68,6 +68,7 @@ export function absolutizeGeneratedUrls(story) {
       ...story.assets,
       video: withUrl(story.assets?.video),
       audio: withUrl(story.assets?.audio),
+      thumbnail: withUrl(story.assets?.thumbnail),
       images: (story.assets?.images || []).map(withUrl)
     }
   };
@@ -95,6 +96,7 @@ export async function uploadStoryAssets(story) {
     const assets = [
       story.assets?.video,
       story.assets?.audio,
+      story.assets?.thumbnail,
       ...(story.assets?.images || [])
     ].filter((asset) => asset?.path && asset?.url);
 

@@ -45,6 +45,13 @@ const shotDirections = [
   "final unsettling atmosphere shot, do not make it a portrait"
 ];
 
+const visualVarietyRules = [
+  "Jangan membuat semua scene berpusat pada satu objek atau satu lokasi kecil saja. Maksimal 2 scene boleh memakai objek utama yang sama.",
+  "Current part harus punya minimal 5 anchor visual berbeda: establishing lokasi, benda petunjuk close-up, POV/layar HP, ruang atau jalan berbeda, pantulan/bayangan, dan cliffhanger akhir.",
+  "ImagePrompt tiap scene wajib menyebut aksi visual, lokasi spesifik, dan komposisi kamera yang berbeda. Jangan hanya mengganti caption di gambar yang sama.",
+  "Kalau ide tidak menyebut sumur, jangan menambahkan sumur. Pilih objek horor yang sesuai ide: angkot, kaca spion, pintu kos, HP, tenda, jendela, cermin, sandal basah, atau lampu jalan."
+];
+
 const fallbackTemplates = [
   {
     title: "Nyanyian dari Sumur Belakang",
@@ -285,6 +292,7 @@ function buildPrompt(input, memory) {
     "Bayangkan semua narration akan digabung menjadi satu audio TTS. Karena itu alurnya harus nyambung, tanpa lompatan bahasa yang terasa ditempel.",
     "Jangan tulis kalimat seperti: bersambung, akan berlanjut, lanjut di part berikutnya, tunggu part berikutnya, atau summary penutup. Akhiri part dengan beat cerita natural.",
     "Setiap scene wajib punya momen visual berbeda, supaya gambar tidak kembar.",
+    ...visualVarietyRules,
     "ScreenText harus pendek, seperti judul beat visual, bukan kalimat panjang.",
     `Detail tokoh utama hanya untuk kontinuitas visual di imagePrompt saat skrip benar-benar butuh orang: ${input.protagonistProfile}.`,
     "Detail tokoh seperti umur, rambut, wajah, jaket, kaos, celana, sepatu, HP, dan senter tidak boleh muncul di narration, hook, logline, ending, screenText, atau part outline.",
@@ -403,10 +411,11 @@ function escapeRegExp(value) {
 function enhancePrompt(prompt, input, index, options = {}) {
   const motif = themeMotif(input.theme, index);
   const requestedBase = prompt || `${motif}, tense quiet horror scene`;
+  const anchor = visualAnchor(input, requestedBase, index);
   const forceAtmospheric = !options.characterShotAllowed || avoidsVisibleCharacter(requestedBase);
   const base = forceAtmospheric
-    ? `${visualFocusFromScene(requestedBase, input, index)}, atmospheric insert shot that follows the script mood, focus on location, object clue, light, shadow, reflection, phone glow, door, window, well surface, or moving object`
-    : requestedBase;
+    ? `${anchor}, ${visualFocusFromScene(requestedBase, input, index)}, atmospheric insert shot that follows the script mood, focus on location, object clue, light, shadow, reflection, phone glow, door, window, vehicle interior, or moving object`
+    : `${anchor}, ${requestedBase}`;
   const direction = forceAtmospheric
     ? "atmospheric or object-focused insert shot, no visible person, no face, no full body"
     : chooseShotDirection(base, input, index);
@@ -417,9 +426,55 @@ function enhancePrompt(prompt, input, index, options = {}) {
     base,
     `composition direction: ${direction}`,
     characterRule,
+    `visual variety anchor for scene ${index + 1}: ${anchor}`,
     "if a well appears, keep any human silhouette beside the well or reflected safely on water, never inside the well",
     visualPromptSuffix
   ].join(", ");
+}
+
+function visualAnchor(input, prompt, index) {
+  const text = `${input.idea || ""} ${input.episodeTitle || ""} ${prompt || ""}`.toLowerCase();
+  if (/\bangkot|mobil|sopir|halte|spion|penumpang|jalan\b/i.test(text)) {
+    return [
+      "empty angkot at a lonely roadside stop",
+      "wet money and a trembling hand near the dashboard",
+      "fogged rear-view mirror with a dark back seat reflection",
+      "yellow street lamp over a looping village road",
+      "close-up of an old route sticker and phone map glow",
+      "shadow-filled passenger bench seen from the driver's POV"
+    ][index % 6];
+  }
+  if (/\bkos|kontrakan|kamar|lorong|pintu\b/i.test(text)) {
+    return [
+      "narrow Indonesian boarding house corridor",
+      "room key and chipped door number close-up",
+      "half-open shared kitchen door in weak neon light",
+      "phone flashlight sweeping across cracked floor tiles",
+      "window reflection at the end of a silent hallway",
+      "dark doorway with sandals placed too neatly outside"
+    ][index % 6];
+  }
+  if (/\bgunung|pendaki|tenda|hutan|jalur|peluit\b/i.test(text)) {
+    return [
+      "misty mountain trail between wet trees",
+      "small tent under dim flashlight glow",
+      "muddy footprints beside hiking boots",
+      "close-up of a whistle hanging from a backpack",
+      "cold camp stove and dying ember light",
+      "tree line silhouette behind thick fog"
+    ][index % 6];
+  }
+  if (/\bpesan suara|nomor|hp|ibu|pemakaman|rumah keluarga\b/i.test(text)) {
+    return [
+      "phone screen with incoming voice message glow",
+      "family hallway after a funeral with dim lamp",
+      "locked bedroom door and fallen photo frame",
+      "close-up of old drawer holding a dead phone",
+      "melati flowers scattered near a threshold",
+      "silent living room seen through a doorway"
+    ][index % 6];
+  }
+  return motifByIndex(input.theme, index);
 }
 
 function selectCharacterSceneIndexes(scenes, input) {
@@ -644,6 +699,10 @@ function themeMotif(theme, index) {
   const key = themes[theme] ? theme : "kos";
   const list = themes[key];
   return list[index % list.length];
+}
+
+function motifByIndex(theme, index) {
+  return themeMotif(theme, index);
 }
 
 function normalizeKey(value) {
