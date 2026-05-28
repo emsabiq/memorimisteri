@@ -19,6 +19,7 @@
         <nav class="tabs" aria-label="Dashboard">
           <button class="active" type="button" data-tab="overview">Memori Misteri</button>
           <button type="button" data-tab="inbox">Accept Cerita</button>
+          <button type="button" data-tab="studio">Studio</button>
           <button type="button" data-tab="episodes">Season & Episode</button>
           <button type="button" data-tab="settings">Settings</button>
         </nav>
@@ -69,6 +70,15 @@
             <div id="submissionList" class="submission-list large"></div>
             <div id="submissionDetail" class="submission-detail">Pilih kiriman untuk review.</div>
           </div>
+        </section>
+
+        <section id="studio" class="tab-panel">
+          <div class="section-head">
+            <h2>Studio Season</h2>
+            <span id="studioBadge" class="pill">Belum dicek</span>
+          </div>
+          <div id="studioSummary" class="studio-summary"></div>
+          <div id="studioGrid" class="studio-grid"></div>
         </section>
 
         <section id="episodes" class="tab-panel">

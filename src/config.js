@@ -31,6 +31,30 @@ function numberEnv(name, fallback) {
   return Number.isFinite(value) ? value : fallback;
 }
 
+function listEnv(value) {
+  return clean(value).split(",").map((item) => clean(item)).filter(Boolean);
+}
+
+const storyApiKey = process.env.STORY_API_KEY || process.env.DINOIKI_API_KEY || process.env.OPENAI_API_KEY || "";
+const hasCustomStoryProvider = Boolean(
+  process.env.STORY_API_KEY ||
+  process.env.DINOIKI_API_KEY ||
+  process.env.STORY_BASE_URL ||
+  process.env.DINOIKI_BASE_URL
+);
+const storyBaseUrl = clean(
+  process.env.STORY_BASE_URL ||
+  process.env.DINOIKI_BASE_URL ||
+  (hasCustomStoryProvider ? "https://ai.dinoiki.com" : process.env.OPENAI_BASE_URL || "https://api.openai.com/v1")
+).replace(/\/+$/g, "");
+const storyModels = listEnv(
+  process.env.STORY_MODELS ||
+  process.env.DINOIKI_STORY_MODELS ||
+  process.env.STORY_MODEL ||
+  process.env.DINOIKI_STORY_MODEL ||
+  (hasCustomStoryProvider ? "gpt.5.5,opus-4.7" : "gpt-4.1-mini")
+);
+
 export const paths = {
   rootDir,
   dataDir: path.join(runtimeDir, "data"),
@@ -53,10 +77,16 @@ export function ensureProjectDirs() {
 export const config = {
   port: Math.max(1, Math.floor(numberEnv("PORT", 3035))),
   publicBaseUrl: clean(process.env.PUBLIC_BASE_URL),
+  story: {
+    apiKey: storyApiKey,
+    baseUrl: storyBaseUrl,
+    model: storyModels[0] || "gpt-4.1-mini",
+    models: storyModels.length ? storyModels : ["gpt-4.1-mini"],
+    provider: storyBaseUrl.includes("dinoiki") ? "dinoiki" : hasCustomStoryProvider ? "custom" : "openai"
+  },
   openai: {
     apiKey: process.env.OPENAI_API_KEY || "",
     baseUrl: clean(process.env.OPENAI_BASE_URL || "https://api.openai.com/v1").replace(/\/+$/g, ""),
-    storyModel: clean(process.env.STORY_MODEL || "gpt-4.1-mini"),
     imageModel: clean(process.env.IMAGE_MODEL || "gpt-image-1-mini"),
     imageSize: clean(process.env.IMAGE_SIZE || "1024x1536"),
     imageQuality: clean(process.env.IMAGE_QUALITY || "low"),
@@ -141,7 +171,10 @@ export function publicConfig() {
     publicBaseUrl: config.publicBaseUrl,
     providers: {
       openai: Boolean(config.openai.apiKey),
-      storyModel: config.openai.storyModel,
+      story: Boolean(config.story.apiKey),
+      storyProvider: config.story.provider,
+      storyBaseUrl: config.story.baseUrl.replace(/^https?:\/\//, ""),
+      storyModel: config.story.model,
       imageModel: config.openai.imageModel,
       imageSize: config.openai.imageSize,
       imageQuality: config.openai.imageQuality,

@@ -4,26 +4,27 @@ import { config, paths } from "./config.js";
 import { safeFilename } from "./util.js";
 
 export async function requestStoryJson(promptText) {
-  assertOpenAi();
-  const response = await fetch(`${config.openai.baseUrl}/chat/completions`, {
-    method: "POST",
-    headers: headersJson(),
-    body: JSON.stringify({
-      model: config.openai.storyModel,
-      response_format: { type: "json_object" },
-      messages: [
-        {
-          role: "system",
-          content: "You are an Indonesian horror short-form video writer. Write first-person, live storytelling narration that sounds like a real Indonesian person quietly telling a frightening experience, cinematic but not stiff. Return valid JSON only."
-        },
-        { role: "user", content: promptText }
-      ],
-      temperature: 0.92
-    })
-  });
-  const data = await parseOpenAiResponse(response);
-  const content = data.choices?.[0]?.message?.content || "";
-  return JSON.parse(content);
+  assertStoryProvider();
+  const errors = [];
+  for (const url of storyCompletionUrls()) {
+    for (const model of config.story.models) {
+      for (const strictJson of [true, false]) {
+        try {
+          const response = await fetch(url, {
+            method: "POST",
+            headers: storyHeadersJson(),
+            body: JSON.stringify(storyPayload({ promptText, model, strictJson }))
+          });
+          const data = await parseOpenAiResponse(response);
+          const content = data.choices?.[0]?.message?.content || "";
+          return parseJsonContent(content);
+        } catch (error) {
+          errors.push(`${model}${strictJson ? "" : " relaxed"}: ${error.message}`);
+        }
+      }
+    }
+  }
+  throw new Error(`Story provider gagal: ${errors.slice(0, 4).join(" | ")}`);
 }
 
 export async function generateSceneImage({ storyId, scene, size, quality }) {
@@ -177,11 +178,55 @@ function assertOpenAi() {
   if (!config.openai.apiKey) throw new Error("OPENAI_API_KEY belum diisi.");
 }
 
+function assertStoryProvider() {
+  if (!config.story.apiKey) throw new Error("STORY_API_KEY atau DINOIKI_API_KEY belum diisi.");
+}
+
 function headersJson() {
   return {
     Authorization: `Bearer ${config.openai.apiKey}`,
     "Content-Type": "application/json"
   };
+}
+
+function storyHeadersJson() {
+  return {
+    Authorization: `Bearer ${config.story.apiKey}`,
+    "Content-Type": "application/json"
+  };
+}
+
+function storyCompletionUrls() {
+  const base = String(config.story.baseUrl || "").replace(/\/+$/g, "");
+  if (!base) return [];
+  const urls = [`${base}/chat/completions`];
+  if (!/\/v1$/i.test(base) && !/\/v1\//i.test(base)) urls.unshift(`${base}/v1/chat/completions`);
+  return [...new Set(urls)];
+}
+
+function storyPayload({ promptText, model, strictJson }) {
+  return {
+    model,
+    ...(strictJson ? { response_format: { type: "json_object" } } : {}),
+    messages: [
+      {
+        role: "system",
+        content: "You are an Indonesian horror short-form video writer. Write first-person, live storytelling narration that sounds like a real Indonesian person quietly telling a frightening experience, cinematic but not stiff. Return valid JSON only."
+      },
+      { role: "user", content: promptText }
+    ],
+    temperature: 0.92
+  };
+}
+
+function parseJsonContent(content) {
+  const text = String(content || "").trim();
+  try {
+    return JSON.parse(text);
+  } catch {}
+  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  const candidate = fenced ? fenced[1].trim() : text.slice(text.indexOf("{"), text.lastIndexOf("}") + 1);
+  return JSON.parse(candidate);
 }
 
 function sanitizeImagePrompt(value) {

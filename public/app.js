@@ -28,6 +28,9 @@ const els = {
   submissionBadge: document.querySelector("#submissionBadge"),
   submissionList: document.querySelector("#submissionList"),
   submissionDetail: document.querySelector("#submissionDetail"),
+  studioBadge: document.querySelector("#studioBadge"),
+  studioSummary: document.querySelector("#studioSummary"),
+  studioGrid: document.querySelector("#studioGrid"),
   episodeBadge: document.querySelector("#episodeBadge"),
   episodeGrid: document.querySelector("#episodeGrid"),
   storyList: document.querySelector("#storyList"),
@@ -97,6 +100,7 @@ function render() {
   renderMetrics();
   renderCurrent();
   renderInbox();
+  renderStudio();
   renderEpisodes();
 }
 
@@ -110,7 +114,8 @@ function renderStatus() {
   els.automationStatus.textContent = `Upload harian: ${auto.dailyPartUpload ? "aktif" : "mati"}; retry: ${auto.retryMinutes || 15} menit; akun: ${auto.accountName || "memorimisteri"}; workflow manual: ${cfg.github?.workflowDispatch ? "siap" : "belum diset"}.`;
   els.remoteStatus.textContent = cfg.ftp?.configured ? `${cfg.ftp.host} -> ${cfg.ftp.remoteDir}` : "Remote belum lengkap.";
   els.providerStatus.textContent = [
-    cfg.providers?.openai ? "OpenAI aktif" : "OpenAI belum aktif",
+    cfg.providers?.story ? `Cerita: ${cfg.providers?.storyProvider || "provider"} / ${cfg.providers?.storyModel || "-"}` : "Cerita belum aktif",
+    cfg.providers?.openai ? "OpenAI image/TTS aktif" : "OpenAI image/TTS belum aktif",
     cfg.providers?.elevenlabs ? "ElevenLabs aktif" : "ElevenLabs fallback dilewati",
     `TTS: ${cfg.providers?.ttsModel || "-"}`
   ].join(" / ");
@@ -302,6 +307,41 @@ function setLamp(el, ok) {
   el.classList.toggle("bad", !ok);
 }
 
+function currentSeasonStory() {
+  const withOutline = [state.current, ...state.stories].find((story) => {
+    const outline = story?.plan?.season?.episodeOutline || story?.plan?.episode?.partOutline;
+    return story && Array.isArray(outline) && outline.length;
+  });
+  return withOutline || state.current || state.stories[0] || null;
+}
+
+function normalizeStudioOutline(story, total) {
+  const season = story?.plan?.season || {};
+  const episode = story?.plan?.episode || {};
+  const raw = Array.isArray(season.episodeOutline)
+    ? season.episodeOutline
+    : Array.isArray(episode.partOutline)
+      ? episode.partOutline
+      : [];
+  return Array.from({ length: total }, (_, index) => {
+    const episodeNumber = index + 1;
+    const item = raw.find((entry) => Number(entry?.episode || entry?.part || 0) === episodeNumber) || raw[index] || {};
+    const storyboards = Array.isArray(item.storyboards) ? item.storyboards.map((beat) => String(beat || "").trim()).filter(Boolean) : [];
+    return {
+      episode: episodeNumber,
+      title: item.title || "",
+      summary: item.summary || item.cliffhanger || "",
+      storyboards
+    };
+  });
+}
+
+function storiesForSeason(title) {
+  const key = normalizeKey(title);
+  if (!key) return state.stories;
+  return state.stories.filter((story) => normalizeKey(seasonMeta(story).title || story.title) === key);
+}
+
 function groupByEpisode(stories) {
   const map = new Map();
   for (const story of stories) {
@@ -322,6 +362,65 @@ function partLabel(story) {
   return season.current ? `Episode ${season.current}/${season.total || "?"}` : "Draft";
 }
 
+function renderStudio() {
+  if (!els.studioGrid) return;
+  const baseStory = currentSeasonStory();
+  if (!baseStory) {
+    els.studioBadge.textContent = "Belum ada cerita";
+    els.studioSummary.innerHTML = `<div class="empty-state">Belum ada cerita Season. Jalankan generate episode pertama dulu supaya sistem membuat outline 10 episode beserta storyboard.</div>`;
+    els.studioGrid.innerHTML = "";
+    return;
+  }
+
+  const meta = seasonMeta(baseStory);
+  const total = Math.max(10, Number(meta.total || 10));
+  const outline = normalizeStudioOutline(baseStory, total);
+  const seasonStories = storiesForSeason(meta.title);
+  const byEpisode = new Map(seasonStories.map((story) => [Number(seasonMeta(story).current || story.input?.partNumber || 0), story]));
+  const ready = outline.filter((item) => item.storyboards.length >= 8).length;
+  const uploaded = seasonStories.filter((story) => story.publish?.state === "uploaded").length;
+  const rendered = seasonStories.filter((story) => Boolean(story.assets?.video?.url || story.assets?.video?.path)).length;
+  const completeOutline = outline.length >= total && ready >= total;
+  const completeSeason = uploaded >= total;
+
+  els.studioBadge.textContent = completeSeason ? "Season selesai" : completeOutline ? "Cerita siap" : "Outline belum lengkap";
+  els.studioSummary.innerHTML = `
+    <div>
+      <span>Season</span>
+      <strong>${escapeHtml(meta.title || "Season tanpa judul")}</strong>
+    </div>
+    <div>
+      <span>Outline</span>
+      <strong>${ready}/${total}</strong>
+    </div>
+    <div>
+      <span>Video</span>
+      <strong>${rendered}/${total}</strong>
+    </div>
+    <div>
+      <span>Upload</span>
+      <strong>${uploaded}/${total}</strong>
+    </div>
+  `;
+
+  els.studioGrid.innerHTML = outline.map((item) => {
+    const story = byEpisode.get(item.episode);
+    const storyReady = item.storyboards.length >= 8;
+    const videoReady = Boolean(story?.assets?.video?.url || story?.assets?.video?.path);
+    const isUploaded = story?.publish?.state === "uploaded";
+    const stateLabel = isUploaded ? "Uploaded" : videoReady ? "Video siap" : storyReady ? "Outline siap" : "Butuh storyboard";
+    return `
+      <article class="studio-card ${isUploaded ? "done" : videoReady ? "ready" : storyReady ? "planned" : "missing"}">
+        <span>Episode ${item.episode}/${total}</span>
+        <strong>${escapeHtml(item.title || `Episode ${item.episode}`)}</strong>
+        <small>${item.storyboards.length} storyboard</small>
+        <p>${escapeHtml((item.summary || item.storyboards.slice(0, 2).join(" - ")).slice(0, 180))}</p>
+        <em>${escapeHtml(stateLabel)}</em>
+      </article>
+    `;
+  }).join("");
+}
+
 function seasonMeta(story) {
   const season = story?.plan?.season || {};
   const episode = story?.plan?.episode || {};
@@ -332,6 +431,10 @@ function seasonMeta(story) {
     episodeTitle: season.episodeTitle || episode.partTitle || story?.title || "",
     arcSummary: season.arcSummary || episode.arcSummary || ""
   };
+}
+
+function normalizeKey(value) {
+  return String(value || "").trim().toLowerCase().replace(/\s+/g, " ");
 }
 
 function submissionStatus(item) {

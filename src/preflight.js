@@ -4,7 +4,8 @@ import { remoteEnabled, publicBaseUrl } from "./remote.js";
 
 const checks = [];
 
-check("OPENAI_API_KEY", Boolean(config.openai.apiKey), "wajib untuk story, image, TTS fallback, dan transcribe");
+check("STORY_API", Boolean(config.story.apiKey), "wajib untuk story dan outline Season");
+check("OPENAI_API_KEY", Boolean(config.openai.apiKey), "wajib untuk image, TTS fallback, dan transcribe");
 check("FFmpeg", spawnSync("ffmpeg", ["-version"], { encoding: "utf8", windowsHide: true }).status === 0, "wajib untuk render");
 check("PUBLIC_BASE_URL", Boolean(publicBaseUrl()), "wajib untuk Meta fetch video publik");
 check("REMOTE_UPLOAD", remoteEnabled(), "FTP/SFTP wajib untuk mistis.emsa.pro");

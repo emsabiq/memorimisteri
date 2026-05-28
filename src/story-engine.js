@@ -171,13 +171,13 @@ export async function createStoryDraft(input, context = {}) {
   let source = "offline-template";
   let warning = "";
 
-  if (config.openai.apiKey) {
+  if (config.story.apiKey) {
     try {
       const ai = await requestStoryJson(promptText);
       plan = normalizePlan(ai, normalized, memory);
-      source = "openai";
+      source = `story-${config.story.provider}`;
     } catch (error) {
-      warning = `OpenAI gagal, pakai draft offline: ${error.message}`;
+      warning = `Story provider gagal, pakai draft offline: ${error.message}`;
       plan = fallbackPlan(normalized, memory);
     }
   } else {

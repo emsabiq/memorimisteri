@@ -82,6 +82,9 @@ jobs:
       PART_UPLOAD_RETRY_MINUTES: ${{ secrets.PART_UPLOAD_RETRY_MINUTES }}
       SOCIAL_ACCOUNT_NAME: memorimisteri
 
+      STORY_API_KEY: ${{ secrets.DINOIKI_API_KEY || secrets.STORY_API_KEY || secrets.OPENAI_API_KEY }}
+      STORY_BASE_URL: ${{ secrets.STORY_BASE_URL || 'https://ai.dinoiki.com' }}
+      STORY_MODELS: ${{ secrets.STORY_MODELS || secrets.STORY_MODEL || 'gpt.5.5,opus-4.7' }}
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
       OPENAI_BASE_URL: ${{ secrets.OPENAI_BASE_URL }}
       STORY_MODEL: ${{ secrets.STORY_MODEL }}
@@ -161,6 +164,8 @@ jobs:
             echo "force_part_number=${MISTIS_FORCE_PART_NUMBER:-next}"
             echo "reset_episode_state=${MISTIS_RESET_EPISODE_STATE:-false}"
             echo "story_idea_configured=$([ -n "$MISTIS_IDEA" ] && echo yes || echo no)"
+            echo "story_provider_base=$([ -n "$STORY_BASE_URL" ] && echo "$STORY_BASE_URL" || echo default)"
+            echo "story_models=$([ -n "$STORY_MODELS" ] && echo "$STORY_MODELS" || echo default)"
             echo "season_title_configured=$([ -n "$MISTIS_SEASON_TITLE" ] && echo yes || echo no)"
             echo "theme=${MISTIS_THEME:-auto}"
             echo "duration=${MISTIS_DURATION:-auto}"

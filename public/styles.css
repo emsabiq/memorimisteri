@@ -904,6 +904,83 @@ button:not(:disabled):hover {
   margin-top: 14px;
 }
 
+.studio-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.studio-summary > div {
+  border: 1px solid #352d29;
+  border-radius: 8px;
+  background: #11100f;
+  padding: 12px;
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.studio-summary span,
+.studio-card span,
+.studio-card small,
+.studio-card em {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.studio-summary strong {
+  overflow-wrap: anywhere;
+}
+
+.studio-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.studio-card {
+  min-height: 156px;
+  border: 1px solid #352d29;
+  border-radius: 8px;
+  background: #11100f;
+  padding: 12px;
+  display: grid;
+  align-content: start;
+  gap: 7px;
+  min-width: 0;
+}
+
+.studio-card strong {
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.studio-card p {
+  color: #d8d0c8;
+  font-size: 12px;
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.studio-card em {
+  font-style: normal;
+  color: #f0c170;
+}
+
+.studio-card.done {
+  border-color: rgba(111, 140, 105, 0.85);
+}
+
+.studio-card.ready,
+.studio-card.planned {
+  border-color: rgba(201, 137, 50, 0.72);
+}
+
 .part-card {
   min-height: 128px;
   background: #11100f;
@@ -1110,6 +1187,8 @@ button:not(:disabled):hover {
 
   .metric-grid,
   .flow-steps,
+  .studio-grid,
+  .studio-summary,
   .field-grid,
   .form-actions {
     grid-template-columns: 1fr;
