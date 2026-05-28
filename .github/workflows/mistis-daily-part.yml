@@ -2,6 +2,17 @@ name: Mistis Daily Part
 
 on:
   workflow_dispatch:
+    inputs:
+      force_new_part:
+        description: Generate a brand-new part on the runner and ignore the already-uploaded-today guard.
+        required: false
+        default: false
+        type: boolean
+      part_number:
+        description: Part number for a forced new generation.
+        required: false
+        default: "1"
+        type: string
   schedule:
     # Starts at 15:00 WIB (08:00 UTC), then retries every 15 minutes until late evening if the part fails.
     # The runner itself enforces one successful part per local day.
@@ -57,6 +68,8 @@ jobs:
       MISTIS_THEME: ${{ secrets.MISTIS_THEME }}
       MISTIS_DURATION: ${{ secrets.MISTIS_DURATION }}
       MISTIS_SCENES: ${{ secrets.MISTIS_SCENES }}
+      MISTIS_FORCE_NEW_PART: ${{ github.event.inputs.force_new_part || 'false' }}
+      MISTIS_FORCE_PART_NUMBER: ${{ github.event.inputs.part_number || '1' }}
 
       GRAPH_API_VERSION: ${{ secrets.GRAPH_API_VERSION }}
       FACEBOOK_UPLOAD_ENABLED: ${{ secrets.FACEBOOK_UPLOAD_ENABLED }}
@@ -99,6 +112,8 @@ jobs:
             echo "facebook_upload_enabled=${FACEBOOK_UPLOAD_ENABLED:-false}"
             echo "instagram_upload_enabled=${INSTAGRAM_UPLOAD_ENABLED:-false}"
             echo "threads_upload_enabled=${THREADS_UPLOAD_ENABLED:-false}"
+            echo "force_new_part=${MISTIS_FORCE_NEW_PART:-false}"
+            echo "force_part_number=${MISTIS_FORCE_PART_NUMBER:-1}"
           } | tee .github-run-logs/run-context.txt
 
       - uses: actions/setup-node@v6

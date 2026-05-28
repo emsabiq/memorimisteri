@@ -20,11 +20,19 @@ export async function uploadNextPart() {
 
   await importRemoteStories();
   const stories = await listStories();
+  const forceNewPart = truthyEnv("MISTIS_FORCE_NEW_PART");
   const dueRetry = stories.find((story) => story.status === "rendered" && story.publish?.state === "failed" && isDue(story.publish.nextAttemptAt));
-  if (!dueRetry && uploadedToday(stories)) {
+  if (!forceNewPart && !dueRetry && uploadedToday(stories)) {
     return { ok: false, skipped: true, reason: "Part hari ini sudah uploaded. Retry gagal tetap akan diproses saat due." };
   }
-  let candidate = dueRetry || nextSequentialStory(stories);
+  let candidate = null;
+  if (forceNewPart) {
+    console.log(`MISTIS_FORCE_NEW_PART=true, generating a fresh part ${forcedPartNumber()} on this runner.`);
+    const generated = await generateForcedPart(stories);
+    candidate = generated.story;
+  } else {
+    candidate = dueRetry || nextSequentialStory(stories);
+  }
   if (!candidate && !dueRetry) {
     const generated = await generateNextSequentialPart(stories);
     candidate = generated.story;
@@ -106,6 +114,29 @@ async function generateNextSequentialPart(stories) {
   const input = {
     idea: process.env.MISTIS_IDEA || generatedIdea.idea,
     episodeTitle: active?.title || "",
+    protagonistName: process.env.MISTIS_PROTAGONIST_NAME || generatedIdea.protagonistName,
+    protagonistProfile: process.env.MISTIS_PROTAGONIST_PROFILE || generatedIdea.protagonistProfile,
+    theme: process.env.MISTIS_THEME || generatedIdea.theme,
+    tone: process.env.MISTIS_TONE || generatedIdea.tone,
+    durationSec: Number(process.env.MISTIS_DURATION || generatedIdea.durationSec),
+    sceneCount: Number(process.env.MISTIS_SCENES || generatedIdea.sceneCount),
+    totalParts,
+    partNumber,
+    imageQuality: process.env.IMAGE_QUALITY || "low",
+    imageSize: process.env.IMAGE_SIZE || "1024x1536",
+    ttsProvider: process.env.MISTIS_TTS_PROVIDER || "elevenlabs",
+    ttsStyle: generatedIdea.ttsStyle
+  };
+  return generateFullStory(input, { ttsProvider: input.ttsProvider });
+}
+
+async function generateForcedPart(stories) {
+  const generatedIdea = randomEpisodeSeed(stories);
+  const totalParts = clampPartTotal(process.env.MISTIS_TOTAL_PARTS || generatedIdea.totalParts);
+  const partNumber = Math.max(1, Math.min(forcedPartNumber(), totalParts));
+  const input = {
+    idea: process.env.MISTIS_IDEA || generatedIdea.idea,
+    episodeTitle: process.env.MISTIS_EPISODE_TITLE || "",
     protagonistName: process.env.MISTIS_PROTAGONIST_NAME || generatedIdea.protagonistName,
     protagonistProfile: process.env.MISTIS_PROTAGONIST_PROFILE || generatedIdea.protagonistProfile,
     theme: process.env.MISTIS_THEME || generatedIdea.theme,
@@ -253,6 +284,15 @@ function isDue(value) {
 function uploadedToday(stories) {
   const today = localDateKey(new Date());
   return stories.some((story) => story.publish?.state === "uploaded" && localDateKey(new Date(story.publish.uploadedAt || 0)) === today);
+}
+
+function truthyEnv(name) {
+  return ["1", "true", "yes", "on"].includes(String(process.env[name] || "").trim().toLowerCase());
+}
+
+function forcedPartNumber() {
+  const value = Number(process.env.MISTIS_FORCE_PART_NUMBER || process.env.MISTIS_PART_NUMBER || 1);
+  return Number.isFinite(value) ? Math.max(1, Math.floor(value)) : 1;
 }
 
 function localDateKey(date) {
