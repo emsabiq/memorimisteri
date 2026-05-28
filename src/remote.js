@@ -68,6 +68,14 @@ export async function uploadStoryAssets(story) {
   });
 }
 
+export async function uploadStateFiles() {
+  const cfg = assertRemoteConfig();
+  await withRemoteClient(cfg, async (client) => {
+    await uploadJsonFile(client, path.join(paths.dataDir, "stories.json"), "state/stories.json");
+    await uploadJsonFile(client, path.join(paths.dataDir, "submissions.json"), "state/submissions.json").catch(() => {});
+  });
+}
+
 export async function uploadPublicSite() {
   const cfg = assertRemoteConfig();
   await withRemoteClient(cfg, async (client) => {

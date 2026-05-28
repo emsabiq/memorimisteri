@@ -98,7 +98,7 @@ jobs:
       - name: Initialize run log
         shell: bash
         run: |
-          mkdir -p .github-run-logs
+          mkdir -p github-run-logs
           {
             echo "# Mistis Daily Part"
             echo "run_id=$GITHUB_RUN_ID"
@@ -114,7 +114,7 @@ jobs:
             echo "threads_upload_enabled=${THREADS_UPLOAD_ENABLED:-false}"
             echo "force_new_part=${MISTIS_FORCE_NEW_PART:-false}"
             echo "force_part_number=${MISTIS_FORCE_PART_NUMBER:-1}"
-          } | tee .github-run-logs/run-context.txt
+          } | tee github-run-logs/run-context.txt
 
       - uses: actions/setup-node@v6
         with:
@@ -127,31 +127,31 @@ jobs:
         run: |
           set -o pipefail
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends ffmpeg 2>&1 | tee .github-run-logs/install-ffmpeg.log
+          sudo apt-get install -y --no-install-recommends ffmpeg 2>&1 | tee github-run-logs/install-ffmpeg.log
 
       - name: Install dependencies
         shell: bash
         run: |
           set -o pipefail
-          npm ci --no-audit --fund=false 2>&1 | tee .github-run-logs/npm-ci.log
+          npm ci --no-audit --fund=false 2>&1 | tee github-run-logs/npm-ci.log
 
       - name: Validate source
         shell: bash
         run: |
           set -o pipefail
-          npm run check 2>&1 | tee .github-run-logs/check.log
+          npm run check 2>&1 | tee github-run-logs/check.log
 
       - name: Preflight
         shell: bash
         run: |
           set -o pipefail
-          npm run preflight 2>&1 | tee .github-run-logs/preflight.log
+          npm run preflight 2>&1 | tee github-run-logs/preflight.log
 
       - name: Inspect remote daily state
         shell: bash
         run: |
           set -o pipefail
-          node --input-type=module <<'EOF' 2>&1 | tee .github-run-logs/remote-state.log
+          node --input-type=module <<'EOF' 2>&1 | tee github-run-logs/remote-state.log
           const base = String(process.env.PUBLIC_BASE_URL || "").replace(/\/+$/g, "");
           if (!base) {
             console.log(JSON.stringify({ ok: false, skipped: true, reason: "PUBLIC_BASE_URL empty" }, null, 2));
@@ -185,7 +185,7 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-          npm run run:once 2>&1 | tee .github-run-logs/run-once.log
+          npm run run:once 2>&1 | tee github-run-logs/run-once.log
 
       - name: Write action summary
         if: always()
@@ -201,8 +201,8 @@ jobs:
             echo ""
             echo "### Remote State"
             echo '```json'
-            if [ -f .github-run-logs/remote-state.log ]; then
-              tail -n 80 .github-run-logs/remote-state.log
+            if [ -f github-run-logs/remote-state.log ]; then
+              tail -n 80 github-run-logs/remote-state.log
             else
               echo '{"status":"not collected"}'
             fi
@@ -210,8 +210,8 @@ jobs:
             echo ""
             echo "### Run Once"
             echo '```'
-            if [ -f .github-run-logs/run-once.log ]; then
-              tail -n 120 .github-run-logs/run-once.log
+            if [ -f github-run-logs/run-once.log ]; then
+              tail -n 120 github-run-logs/run-once.log
             else
               echo "run-once did not start"
             fi
@@ -223,6 +223,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: mistis-daily-part-logs-${{ github.run_id }}
-          path: .github-run-logs/
+          path: github-run-logs/
           if-no-files-found: warn
           retention-days: 14

@@ -1,7 +1,7 @@
 import { config, ensureProjectDirs } from "./config.js";
 import { pathToFileURL } from "node:url";
 import { generateFullStory } from "./pipeline.js";
-import { absolutizeGeneratedUrls, publicBaseUrl, remoteEnabled, uploadPublicSite, uploadStoryAssets } from "./remote.js";
+import { absolutizeGeneratedUrls, publicBaseUrl, remoteEnabled, uploadPublicSite, uploadStateFiles, uploadStoryAssets } from "./remote.js";
 import { publishToSocials } from "./social.js";
 import { listStories, saveStories, saveStory } from "./storage.js";
 import { nowIso } from "./util.js";
@@ -70,6 +70,7 @@ export async function uploadNextPart() {
     };
     candidate.updatedAt = nowIso();
     await saveStory(candidate);
+    if (remoteEnabled()) await uploadStateFiles();
     return { ok: true, storyId: candidate.id, title: candidate.title, part: partKey(candidate), published };
   } catch (error) {
     const attempts = Number(candidate.publish?.attempts || 0) + 1;
@@ -83,6 +84,11 @@ export async function uploadNextPart() {
     };
     candidate.updatedAt = nowIso();
     await saveStory(candidate);
+    if (remoteEnabled()) {
+      await uploadStateFiles().catch((syncError) => {
+        console.warn(`State remote belum tersinkron setelah upload gagal: ${syncError.message}`);
+      });
+    }
     return { ok: false, storyId: candidate.id, title: candidate.title, part: partKey(candidate), error: error.message, nextAttemptAt: candidate.publish.nextAttemptAt };
   }
 }
