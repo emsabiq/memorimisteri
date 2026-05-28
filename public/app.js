@@ -363,10 +363,13 @@ function normalizeStoryboardDetail(item) {
     const text = item.trim();
     return { beat: text, narration: text, imagePrompt: text };
   }
+  const beat = String(item?.beat || item?.screenText || item?.summary || item?.title || "").trim();
+  const narration = String(item?.narration || item?.voiceover || item?.text || beat).trim();
+  const imagePrompt = String(item?.imagePrompt || item?.visual || item?.prompt || beat).trim();
   return {
-    beat: String(item?.beat || item?.screenText || item?.summary || item?.title || "").trim(),
-    narration: String(item?.narration || item?.voiceover || item?.text || "").trim(),
-    imagePrompt: String(item?.imagePrompt || item?.visual || item?.prompt || "").trim()
+    beat,
+    narration,
+    imagePrompt
   };
 }
 
