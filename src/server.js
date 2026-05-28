@@ -44,9 +44,11 @@ app.get("/api/health", (_req, res) => {
   });
 });
 
+app.use("/api", requireDashboardPin);
+
 app.get("/api/stories", async (_req, res, next) => {
   try {
-    res.json({ stories: await listStories() });
+    res.json({ stories: await listStoriesWithRemote() });
   } catch (error) {
     next(error);
   }
@@ -185,10 +187,14 @@ app.use((error, _req, res, _next) => {
   res.status(error.status || 500).json({ error: error.message || "Server error" });
 });
 
-app.listen(config.port, () => {
-  console.log(`Mistis Story Video Studio running at http://localhost:${config.port}`);
-  startUploadLoop();
-});
+if (!process.env.VERCEL) {
+  app.listen(config.port, () => {
+    console.log(`Mistis Story Video Studio running at http://localhost:${config.port}`);
+    startUploadLoop();
+  });
+}
+
+export default app;
 
 function startUploadLoop() {
   if (!config.automation.dailyPartUpload) return;
@@ -220,6 +226,29 @@ async function listSubmissionsWithRemote() {
   return [...byId.values()].sort((a, b) => String(b.updatedAt || b.createdAt).localeCompare(String(a.updatedAt || a.createdAt)));
 }
 
+async function listStoriesWithRemote() {
+  const local = await listStories();
+  const remote = await fetchRemoteStories();
+  const byId = new Map();
+  for (const item of [...remote, ...local]) {
+    if (item?.id) byId.set(item.id, { ...(byId.get(item.id) || {}), ...item });
+  }
+  return [...byId.values()].sort((a, b) => String(b.updatedAt || b.createdAt).localeCompare(String(a.updatedAt || a.createdAt)));
+}
+
+async function fetchRemoteStories() {
+  if (!config.publicBaseUrl) return [];
+  try {
+    const url = `${String(config.publicBaseUrl).replace(/\/+$/g, "")}/state/stories.json?v=${Date.now()}`;
+    const response = await fetch(url, { cache: "no-store" });
+    if (!response.ok) return [];
+    const data = await response.json();
+    return Array.isArray(data) ? data : [];
+  } catch {
+    return [];
+  }
+}
+
 async function fetchRemoteSubmissions() {
   if (!config.publicBaseUrl) return [];
   try {
@@ -234,6 +263,13 @@ async function fetchRemoteSubmissions() {
   } catch {
     return [];
   }
+}
+
+function requireDashboardPin(req, res, next) {
+  const expected = String(process.env.AUTO_DASHBOARD_PIN || "123456").trim();
+  const provided = String(req.headers["x-dashboard-pin"] || req.query.pin || "").trim();
+  if (!expected || provided === expected) return next();
+  res.status(401).json({ error: "PIN dashboard tidak valid." });
 }
 
 async function requireStory(id) {

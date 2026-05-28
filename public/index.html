@@ -3,212 +3,98 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Mistis Story Video Studio</title>
+    <title>Memori Misteri Dashboard</title>
     <link rel="stylesheet" href="/styles.css">
   </head>
-  <body>
-    <main class="app-shell">
-      <aside class="sidebar">
+  <body class="dashboard-page">
+    <main class="mist-dashboard">
+      <aside class="mist-nav">
         <div class="brand">
           <span class="brand-mark"></span>
           <div>
-            <h1>Mistis Studio</h1>
-            <p id="runtimeStatus">Memuat status</p>
+            <h1>Memori Misteri</h1>
+            <p id="runtimeStatus">Menghubungi bayangan...</p>
           </div>
         </div>
-        <a class="fan-link" href="/fan.php" target="_blank" rel="noreferrer">Halaman kirim cerita</a>
-
-        <form id="storyForm" class="panel form-panel">
-          <label>
-            <span>Ide cerita</span>
-            <textarea name="idea" rows="5">Di rumah kosong dekat sawah, ada suara perempuan menyanyi dari sumur tua setiap malam Jumat. Saat direkam, yang muncul justru bayangan di jendela dan suara lain memanggil dari belakang.</textarea>
-          </label>
-
-          <label>
-            <span>Judul episode</span>
-            <input name="episodeTitle" value="Rumah Kosong di Pinggir Sawah">
-          </label>
-
-          <div class="field-grid">
-            <label>
-              <span>Karakter</span>
-              <input name="protagonistName" value="Andi">
-            </label>
-            <label>
-              <span>Total part</span>
-              <input name="totalParts" type="number" min="6" max="20" value="10">
-            </label>
-          </div>
-
-          <details class="collapsible-field">
-            <summary>Rincian karakter</summary>
-            <label>
-              <span>Profil konsisten</span>
-              <textarea name="protagonistProfile" rows="4">Andi, pria Indonesia 28 tahun, rambut hitam pendek sedikit berantakan, wajah lelah dan penasaran, jaket denim gelap di atas kaos hitam polos, celana cargo hitam, sneakers gelap usang, selalu membawa smartphone dan senter kecil</textarea>
-            </label>
-          </details>
-
-          <div class="field-grid">
-            <label>
-              <span>Tema</span>
-              <select name="theme">
-                <option value="kos">Kos</option>
-                <option value="jalan">Jalan sepi</option>
-                <option value="rumah" selected>Rumah kosong</option>
-                <option value="pendaki">Pendaki</option>
-                <option value="mimpi">Mimpi buruk</option>
-              </select>
-            </label>
-            <label>
-              <span>Durasi</span>
-              <select name="durationSec">
-                <option value="60" selected>1 menit</option>
-              </select>
-            </label>
-            <label>
-              <span>Part</span>
-              <input name="partNumber" type="number" min="1" max="20" value="1">
-            </label>
-            <label>
-              <span>Scene</span>
-              <input name="sceneCount" type="number" min="6" max="10" value="8">
-            </label>
-            <label>
-              <span>Kualitas</span>
-              <select name="imageQuality">
-                <option value="low" selected>Low</option>
-                <option value="medium">Medium</option>
-                <option value="high">High</option>
-              </select>
-            </label>
-          </div>
-
-          <label>
-            <span>Gaya suara</span>
-            <input name="tone" value="seram pelan, live storytelling, seperti orang cerita pengalaman mistis asli">
-          </label>
-
-          <div class="form-actions">
-            <button class="secondary" type="submit">Buat draft</button>
-            <button id="fullGenerateBtn" class="primary" type="button">Generate part lengkap</button>
-          </div>
-        </form>
-
-        <section class="panel compact">
-          <div class="section-head">
-            <h2>Produksi</h2>
-            <span id="publishStatus" class="pill">Disabled</span>
-          </div>
-          <div class="platforms">
-            <span>YouTube</span>
-            <span>Facebook</span>
-            <span>Instagram</span>
-            <span>Threads</span>
-          </div>
-        </section>
-
-        <section class="panel compact">
-          <div class="section-head">
-            <h2>Antrian Penggemar</h2>
-            <span id="submissionCount" class="pill">0</span>
-          </div>
-          <div id="submissionList" class="submission-list"></div>
-        </section>
-
-        <section class="panel compact">
-          <div class="section-head">
-            <h2>Riwayat</h2>
-            <span id="storyCount" class="pill">0</span>
-          </div>
-          <div id="storyList" class="story-list"></div>
-        </section>
+        <nav class="tabs" aria-label="Dashboard">
+          <button class="active" type="button" data-tab="overview">Overview</button>
+          <button type="button" data-tab="inbox">Inbox</button>
+          <button type="button" data-tab="episodes">Episodes</button>
+          <button type="button" data-tab="settings">Settings</button>
+        </nav>
+        <a class="fan-link" href="/fan.php" target="_blank" rel="noreferrer">Halaman penggemar</a>
       </aside>
 
-      <section class="workspace">
-        <div class="topbar">
+      <section class="mist-main">
+        <header class="mist-header">
           <div>
-            <p class="eyebrow">Local horror generator</p>
-            <h2 id="storyTitle">Belum ada draft</h2>
+            <p class="eyebrow">Automatic horror studio</p>
+            <h2 id="heroTitle">Sistem sedang berjaga</h2>
           </div>
-          <div class="actions">
-            <button id="fullGenerateTopBtn" class="primary" type="button">Generate part baru</button>
-            <button id="imageBtn" class="secondary" type="button">Gambar scene</button>
-            <button id="ttsBtn" class="secondary" type="button">TTS</button>
-            <button id="renderBtn" class="primary" type="button">Render video</button>
+          <div class="status-lamps">
+            <span id="fbLamp">FB</span>
+            <span id="igLamp">IG</span>
+            <span id="threadsLamp">TH</span>
           </div>
-        </div>
+        </header>
 
-        <div class="metric-grid">
-          <div class="metric">
-            <span>Token</span>
-            <strong id="tokenMetric">0</strong>
+        <section id="overview" class="tab-panel active">
+          <div class="metric-grid">
+            <div class="metric"><span>Total episode</span><strong id="storyCount">0</strong></div>
+            <div class="metric"><span>Antrian cerita</span><strong id="submissionCount">0</strong></div>
+            <div class="metric"><span>Upload hari ini</span><strong id="todayUpload">0</strong></div>
+            <div class="metric"><span>Retry gagal</span><strong id="retryCount">0</strong></div>
           </div>
-          <div class="metric">
-            <span>Gambar</span>
-            <strong id="imageMetric">$0.000</strong>
-          </div>
-          <div class="metric">
-            <span>TTS</span>
-            <strong id="ttsMetric">$0.000</strong>
-          </div>
-          <div class="metric">
-            <span>Total</span>
-            <strong id="totalMetric">$0.000</strong>
-          </div>
-        </div>
-
-        <div class="preview-grid">
-          <section class="phone-preview">
-            <div class="phone-frame">
-              <div class="film-layer"></div>
-              <div class="phone-copy">
-                <span id="previewHook">Kisah malam ini</span>
-                <strong id="previewText">Draft visual akan muncul di sini</strong>
-              </div>
-            </div>
-          </section>
-
           <section class="story-panel">
             <div class="section-head">
-              <h2>Story</h2>
-              <span id="sourceBadge" class="pill">Offline</span>
+              <h2>Part Aktif</h2>
+              <span id="sourceBadge" class="pill">Auto</span>
             </div>
-            <p id="logline" class="logline">Isi ide cerita untuk membuat struktur video.</p>
-            <div class="asset-strip">
-              <span id="imageStatus">Gambar: belum dirender</span>
-              <span id="audioStatus">Suara: belum dirender</span>
-            </div>
+            <p id="logline" class="logline">Belum ada state remote yang terbaca.</p>
             <div id="flowSteps" class="flow-steps"></div>
-            <div id="videoSlot" class="video-slot"></div>
+            <div id="videoSlot" class="video-slot">Video terakhir akan muncul di sini.</div>
           </section>
-        </div>
+        </section>
 
-        <section class="scene-section">
+        <section id="inbox" class="tab-panel">
           <div class="section-head">
-            <h2>Episode Roadmap</h2>
+            <h2>Antrian Cerita Penggemar</h2>
+            <span id="submissionBadge" class="pill">0</span>
+          </div>
+          <div class="split-panel">
+            <div id="submissionList" class="submission-list large"></div>
+            <div id="submissionDetail" class="submission-detail">Pilih kiriman untuk review.</div>
+          </div>
+        </section>
+
+        <section id="episodes" class="tab-panel">
+          <div class="section-head">
+            <h2>Episode & Part</h2>
             <span id="episodeBadge" class="pill">0 part</span>
           </div>
           <div id="episodeGrid" class="episode-grid"></div>
+          <div id="storyList" class="story-list episode-history"></div>
         </section>
 
-        <section class="scene-section">
-          <div class="section-head">
-            <h2>Kiriman Terpilih</h2>
-            <span id="submissionBadge" class="pill">Belum ada</span>
+        <section id="settings" class="tab-panel">
+          <div class="settings-grid">
+            <article class="panel compact"><h2>Automation</h2><p id="automationStatus">Memuat...</p></article>
+            <article class="panel compact"><h2>Remote</h2><p id="remoteStatus">Memuat...</p></article>
+            <article class="panel compact"><h2>Providers</h2><p id="providerStatus">Memuat...</p></article>
+            <article class="panel compact"><h2>Fan Page</h2><p><a href="/fan.php" target="_blank" rel="noreferrer">Buka halaman kirim cerita</a></p></article>
           </div>
-          <div id="submissionDetail" class="submission-detail">Pilih kiriman dari antrian untuk transcribe atau jadikan episode.</div>
-        </section>
-
-        <section class="scene-section">
-          <div class="section-head">
-            <h2>Scenes</h2>
-            <span id="sceneCountBadge" class="pill">0 scene</span>
-          </div>
-          <div id="sceneGrid" class="scene-grid"></div>
         </section>
       </section>
     </main>
 
+    <div id="pinGate" class="pin-gate">
+      <form id="pinForm" class="panel pin-box">
+        <p class="eyebrow">Memori Misteri</p>
+        <h2>Dashboard terkunci</h2>
+        <input name="pin" type="password" inputmode="numeric" autocomplete="current-password" placeholder="PIN dashboard" required>
+        <button class="primary" type="submit">Masuk</button>
+      </form>
+    </div>
     <div id="toast" class="toast" role="status"></div>
     <script src="/app.js" type="module"></script>
   </body>

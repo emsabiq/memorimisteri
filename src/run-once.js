@@ -110,10 +110,12 @@ async function generateNextSequentialPart(stories) {
     .filter(Boolean));
   let partNumber = 1;
   while (completedParts.has(partNumber) && partNumber < totalParts) partNumber += 1;
+  const finishedEpisode = completedParts.size >= totalParts && completedParts.has(totalParts);
+  const nextEpisodeTitle = finishedEpisode ? nextEpisodeName(episodeTitle || process.env.MISTIS_DEFAULT_EPISODE || "Memori Misteri Harian", stories) : episodeTitle;
 
   const input = {
     idea: process.env.MISTIS_IDEA || "Cerita mistis serial dari follower Memorimisteri tentang kejadian aneh yang awalnya kecil, lalu makin dekat dan sulit dijelaskan.",
-    episodeTitle: episodeTitle || process.env.MISTIS_DEFAULT_EPISODE || "Memori Misteri Harian",
+    episodeTitle: nextEpisodeTitle || process.env.MISTIS_DEFAULT_EPISODE || "Memori Misteri Harian",
     protagonistName: process.env.MISTIS_PROTAGONIST_NAME || "Aku",
     protagonistProfile: process.env.MISTIS_PROTAGONIST_PROFILE || "",
     theme: process.env.MISTIS_THEME || "rumah",
@@ -121,12 +123,22 @@ async function generateNextSequentialPart(stories) {
     durationSec: Number(process.env.MISTIS_DURATION || 60),
     sceneCount: Number(process.env.MISTIS_SCENES || 8),
     totalParts,
-    partNumber,
+    partNumber: finishedEpisode ? 1 : partNumber,
     imageQuality: process.env.IMAGE_QUALITY || "low",
     imageSize: process.env.IMAGE_SIZE || "1024x1536",
     ttsProvider: process.env.MISTIS_TTS_PROVIDER || "elevenlabs"
   };
   return generateFullStory(input, { ttsProvider: input.ttsProvider });
+}
+
+function nextEpisodeName(baseTitle, stories) {
+  const base = String(baseTitle || "Memori Misteri Harian").replace(/\s+#\d+$/g, "").trim();
+  const used = new Set(stories.map((story) => episodeKey(story)).filter(Boolean));
+  for (let index = 2; index < 1000; index += 1) {
+    const title = `${base} #${index}`;
+    if (!used.has(title.toLowerCase())) return title;
+  }
+  return `${base} #${Date.now().toString().slice(-6)}`;
 }
 
 function nextSequentialStory(stories) {

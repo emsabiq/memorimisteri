@@ -27,6 +27,184 @@ body {
   font-family: Inter, "Segoe UI", Arial, sans-serif;
 }
 
+.dashboard-page {
+  background:
+    linear-gradient(180deg, rgba(3, 4, 4, 0.25), rgba(3, 4, 4, 0.92)),
+    linear-gradient(145deg, #050606 0%, #15100f 44%, #071714 100%);
+}
+
+.mist-dashboard {
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr);
+}
+
+.mist-nav {
+  border-right: 1px solid rgba(226, 196, 131, 0.18);
+  background:
+    linear-gradient(180deg, rgba(14, 13, 12, 0.96), rgba(4, 5, 5, 0.98)),
+    linear-gradient(135deg, rgba(99, 15, 21, 0.18), transparent);
+  padding: 22px;
+  display: grid;
+  align-content: start;
+  gap: 18px;
+}
+
+.tabs {
+  display: grid;
+  gap: 8px;
+}
+
+.tabs button {
+  min-height: 44px;
+  border: 1px solid #332a27;
+  border-radius: 7px;
+  color: #d8d0c8;
+  background: #0d0d0c;
+  text-align: left;
+  padding: 0 13px;
+}
+
+.tabs button.active {
+  color: #f7f1e5;
+  border-color: rgba(185, 39, 45, 0.8);
+  background: linear-gradient(135deg, rgba(94, 18, 23, 0.72), rgba(18, 18, 17, 0.96));
+}
+
+.mist-main {
+  min-width: 0;
+  padding: 24px;
+}
+
+.mist-header {
+  min-height: 190px;
+  border-bottom: 1px solid rgba(226, 196, 131, 0.18);
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px 0 22px;
+  position: relative;
+  overflow: hidden;
+}
+
+.mist-header::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(90deg, rgba(7, 8, 7, 0.98), rgba(7, 8, 7, 0.4)),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='1100' height='360' viewBox='0 0 1100 360'%3E%3Crect width='1100' height='360' fill='%23070807'/%3E%3Ccircle cx='890' cy='92' r='64' fill='%23bb883b' opacity='.48'/%3E%3Cpath d='M0 295 C170 230 310 302 480 230 C640 162 810 245 1100 155 L1100 360 L0 360 Z' fill='%2315211c'/%3E%3Cpath d='M660 80 L975 125 L950 320 L640 320 Z' fill='%23120e0d'/%3E%3Cpath d='M700 130 L795 145 L787 250 L695 240 Z' fill='%23212622'/%3E%3Cpath d='M150 348 C220 250 318 250 380 348' stroke='%235d3d2b' stroke-width='20' fill='none'/%3E%3Ccircle cx='265' cy='348' r='90' fill='%23070807'/%3E%3C/svg%3E");
+  background-size: cover;
+  background-position: center right;
+  opacity: 0.78;
+  pointer-events: none;
+}
+
+.mist-header > * {
+  position: relative;
+  z-index: 1;
+}
+
+.mist-header h2 {
+  font-size: 44px;
+  line-height: 1;
+}
+
+.status-lamps {
+  display: flex;
+  gap: 8px;
+}
+
+.status-lamps span {
+  border: 1px solid #4b3e38;
+  border-radius: 7px;
+  background: #120f0e;
+  color: #8f8580;
+  padding: 8px 10px;
+  font-size: 12px;
+}
+
+.status-lamps span.ok {
+  color: #d7f2cf;
+  border-color: rgba(111, 140, 105, 0.8);
+}
+
+.status-lamps span.bad {
+  color: #e0a09d;
+  border-color: rgba(185, 39, 45, 0.55);
+}
+
+.tab-panel {
+  display: none;
+  padding-top: 18px;
+}
+
+.tab-panel.active {
+  display: block;
+}
+
+.split-panel {
+  display: grid;
+  grid-template-columns: minmax(260px, 360px) minmax(0, 1fr);
+  gap: 16px;
+  margin-top: 14px;
+}
+
+.submission-list.large {
+  max-height: 680px;
+}
+
+.episode-history {
+  max-height: 420px;
+}
+
+.empty-state {
+  border: 1px dashed #463b35;
+  border-radius: 8px;
+  color: var(--muted);
+  padding: 18px;
+}
+
+.settings-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 14px;
+}
+
+.settings-grid p,
+.settings-grid a {
+  color: #d8d0c8;
+  line-height: 1.5;
+}
+
+.pin-gate {
+  position: fixed;
+  inset: 0;
+  background:
+    linear-gradient(180deg, rgba(0, 0, 0, 0.35), rgba(0, 0, 0, 0.9)),
+    #070807;
+  display: grid;
+  place-items: center;
+  z-index: 20;
+  padding: 18px;
+}
+
+.pin-gate.hidden {
+  display: none;
+}
+
+.pin-box {
+  width: min(360px, 100%);
+  padding: 20px;
+  display: grid;
+  gap: 13px;
+}
+
+.pin-box h2 {
+  font-size: 24px;
+}
+
 button,
 input,
 select,
@@ -814,6 +992,19 @@ button:not(:disabled):hover {
 }
 
 @media (max-width: 1080px) {
+  .mist-dashboard {
+    grid-template-columns: 1fr;
+  }
+
+  .mist-nav {
+    border-right: 0;
+    border-bottom: 1px solid rgba(226, 196, 131, 0.18);
+  }
+
+  .split-panel {
+    grid-template-columns: 1fr;
+  }
+
   .app-shell {
     grid-template-columns: 1fr;
   }
@@ -837,6 +1028,22 @@ button:not(:disabled):hover {
 }
 
 @media (max-width: 720px) {
+  .mist-main,
+  .mist-nav {
+    padding: 15px;
+  }
+
+  .mist-header {
+    min-height: 160px;
+    align-items: stretch;
+    flex-direction: column;
+    justify-content: end;
+  }
+
+  .mist-header h2 {
+    font-size: 32px;
+  }
+
   .workspace,
   .sidebar {
     padding: 15px;
