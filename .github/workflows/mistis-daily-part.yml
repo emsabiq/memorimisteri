@@ -12,7 +12,6 @@ on:
         description: Part number for a forced new generation.
         required: false
         default: "1"
-        type: string
       reset_episode_state:
         description: Clear remote story state first so this run becomes the only active episode.
         required: false
@@ -22,27 +21,22 @@ on:
         description: Optional explicit story idea for this run.
         required: false
         default: ""
-        type: string
       episode_title:
         description: Optional episode title override.
         required: false
         default: ""
-        type: string
       theme:
         description: Optional theme key: rumah, kos, jalan, pendaki, mimpi.
         required: false
         default: ""
-        type: string
       duration:
         description: Optional target duration in seconds.
         required: false
         default: ""
-        type: string
       scenes:
         description: Optional scene count.
         required: false
         default: ""
-        type: string
   schedule:
     # Starts at 15:00 WIB (08:00 UTC), then retries every 15 minutes until late evening if the part fails.
     # The runner itself enforces one successful part per local day.
@@ -96,15 +90,15 @@ jobs:
       SUBTITLE_FONT_FAMILY: Scholar
       PRODUCER_MUSIC_VOLUME: ${{ secrets.PRODUCER_MUSIC_VOLUME || '0.42' }}
 
-      MISTIS_IDEA: ${{ github.event.inputs.story_idea || secrets.MISTIS_IDEA }}
-      MISTIS_EPISODE_TITLE: ${{ github.event.inputs.episode_title || secrets.MISTIS_EPISODE_TITLE }}
+      MISTIS_IDEA: ${{ inputs.story_idea || secrets.MISTIS_IDEA }}
+      MISTIS_EPISODE_TITLE: ${{ inputs.episode_title || secrets.MISTIS_EPISODE_TITLE }}
       MISTIS_TOTAL_PARTS: ${{ secrets.MISTIS_TOTAL_PARTS }}
-      MISTIS_THEME: ${{ github.event.inputs.theme || secrets.MISTIS_THEME }}
-      MISTIS_DURATION: ${{ github.event.inputs.duration || secrets.MISTIS_DURATION }}
-      MISTIS_SCENES: ${{ github.event.inputs.scenes || secrets.MISTIS_SCENES }}
-      MISTIS_FORCE_NEW_PART: ${{ github.event.inputs.force_new_part || 'false' }}
-      MISTIS_FORCE_PART_NUMBER: ${{ github.event.inputs.part_number || '1' }}
-      MISTIS_RESET_EPISODE_STATE: ${{ github.event.inputs.reset_episode_state || 'false' }}
+      MISTIS_THEME: ${{ inputs.theme || secrets.MISTIS_THEME }}
+      MISTIS_DURATION: ${{ inputs.duration || secrets.MISTIS_DURATION }}
+      MISTIS_SCENES: ${{ inputs.scenes || secrets.MISTIS_SCENES }}
+      MISTIS_FORCE_NEW_PART: ${{ inputs.force_new_part || 'false' }}
+      MISTIS_FORCE_PART_NUMBER: ${{ inputs.part_number || '1' }}
+      MISTIS_RESET_EPISODE_STATE: ${{ inputs.reset_episode_state || 'false' }}
 
       GRAPH_API_VERSION: ${{ secrets.GRAPH_API_VERSION }}
       FACEBOOK_UPLOAD_ENABLED: ${{ secrets.FACEBOOK_UPLOAD_ENABLED }}
