@@ -26,7 +26,7 @@ on:
         required: false
         default: ""
       theme:
-        description: Optional theme key: rumah, kos, jalan, pendaki, mimpi.
+        description: "Optional theme key: rumah, kos, jalan, pendaki, mimpi."
         required: false
         default: ""
       duration:
