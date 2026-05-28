@@ -682,10 +682,16 @@ function normalizePartOutline(outline, input) {
 
 function normalizeOutlineStoryboards(storyboards, part, input) {
   const list = Array.isArray(storyboards) ? storyboards : [];
-  const normalized = list
-    .map((item) => cleanText(item, 90))
-    .filter(Boolean)
-    .slice(0, 10);
+  const seen = new Set();
+  const normalized = [];
+  for (const item of list) {
+    const text = cleanText(item, 120);
+    const key = normalizeKey(text);
+    if (!text || seen.has(key)) continue;
+    seen.add(key);
+    normalized.push(text);
+    if (normalized.length >= 10) break;
+  }
   while (normalized.length < 8) {
     normalized.push(defaultStoryboardBeat(part, normalized.length + 1, input));
   }
@@ -693,14 +699,60 @@ function normalizeOutlineStoryboards(storyboards, part, input) {
 }
 
 function defaultStoryboardBeat(part, beat, input) {
-  const focus = input.theme === "pendaki"
-    ? "jalur gunung, tenda, dan peluit yang makin dekat"
-    : input.theme === "jalan"
-      ? "jalan kosong dan kendaraan terakhir"
-      : input.theme === "kos"
-        ? "lorong dan kamar yang tidak beres"
-        : "tempat utama yang makin dingin";
-  return `Episode ${part} beat ${beat}: ${focus} membuka petunjuk baru`;
+  const byTheme = {
+    pendaki: [
+      "kabut turun di jalur dan suara peluit pertama terdengar jauh",
+      "jejak basah muncul di dekat tenda padahal tanah sebelumnya kering",
+      "senter menyapu pohon dan menemukan tanda kain yang baru diikat",
+      "kompor kecil mati sendiri saat nama salah satu pendaki disebut",
+      "rekaman HP menangkap suara langkah dari arah jurang",
+      "tas salah satu pendaki terbuka dengan peluit asing di dalamnya",
+      "jumlah sepatu di depan tenda berubah saat semua orang berkumpul",
+      "cliffhanger: peluit berbunyi dari dalam tenda yang kosong"
+    ],
+    kos: [
+      "kunci asing jatuh dari saku dan nomornya tidak ada di denah kos",
+      "lorong dapur memanjang saat lampu neon mulai berkedip",
+      "suara ketikan terdengar dari kamar yang dikunci dari luar",
+      "papan penghuni lama menunjukkan nama yang seharusnya belum ada",
+      "pintu kamar bernomor ganjil muncul di ujung lorong",
+      "HP merekam napas dari balik pintu tanpa menampilkan siapa pun",
+      "sandal basah tersusun rapi di depan kamar narator",
+      "cliffhanger: gagang pintu bergerak dari sisi dalam"
+    ],
+    jalan: [
+      "kendaraan terakhir berhenti di halte kosong yang lampunya redup",
+      "penumpang naik tanpa suara dan duduk di kursi paling belakang",
+      "alamat tujuan hilang dari peta saat jalan mulai berulang",
+      "kaca spion berembun dan menampilkan kursi yang seharusnya kosong",
+      "uang basah tertinggal di dashboard dengan bau tanah hujan",
+      "lampu jalan padam satu per satu mengikuti arah kendaraan",
+      "rute memutar kembali ke titik awal meski sudah belok jauh",
+      "cliffhanger: suara dari kursi belakang menyuruh jangan berhenti"
+    ],
+    mimpi: [
+      "pesan suara masuk dari nomor yang seharusnya sudah mati",
+      "foto keluarga jatuh tepat di depan pintu kamar terkunci",
+      "bau melati keluar dari celah pintu saat rumah mendadak sunyi",
+      "suara di pesan meminta narator tidak tidur di kamar depan",
+      "bayangan keluarga berdiri kaku di ujung lorong",
+      "laci lama terbuka dan HP mati menyala sendiri",
+      "rekaman suara menyebut nama orang yang belum pulang",
+      "cliffhanger: wajah di rumah itu bukan orang yang dikenal"
+    ],
+    rumah: [
+      "lampu rumah menyala sendiri tepat saat jam melewati dua malam",
+      "ketukan kecil berpindah dari jendela ke pintu belakang",
+      "kursi ruang tamu bergeser sedikit setiap kali kamera menunduk",
+      "rekaman HP menangkap suara narator dari ruangan kosong",
+      "jejak tanah basah berhenti di depan kamar yang terkunci",
+      "foto lama memperlihatkan benda yang baru saja ditemukan",
+      "jendela retak memantulkan bayangan yang tidak ada di ruangan",
+      "cliffhanger: pintu belakang terbuka dari sisi dalam"
+    ]
+  };
+  const beats = byTheme[input.theme] || byTheme.rumah;
+  return `Episode ${part} beat ${beat}: ${beats[(beat - 1) % beats.length]}`;
 }
 
 function defaultPartSummary(part, input) {
