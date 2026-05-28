@@ -47,7 +47,7 @@ const shotDirections = [
 
 const visualVarietyRules = [
   "Jangan membuat semua scene berpusat pada satu objek atau satu lokasi kecil saja. Maksimal 2 scene boleh memakai objek utama yang sama.",
-  "Current part harus punya minimal 5 anchor visual berbeda: establishing lokasi, benda petunjuk close-up, POV/layar HP, ruang atau jalan berbeda, pantulan/bayangan, dan cliffhanger akhir.",
+  "Current episode harus punya minimal 5 anchor visual berbeda: establishing lokasi, benda petunjuk close-up, POV/layar HP, ruang atau jalan berbeda, pantulan/bayangan, dan cliffhanger akhir.",
   "ImagePrompt tiap scene wajib menyebut aksi visual, lokasi spesifik, dan komposisi kamera yang berbeda. Jangan hanya mengganti caption di gambar yang sama.",
   "Kalau ide tidak menyebut sumur, jangan menambahkan sumur. Pilih objek horor yang sesuai ide: angkot, kaca spion, pintu kos, HP, tenda, jendela, cermin, sandal basah, atau lampu jalan."
 ];
@@ -225,9 +225,11 @@ function normalizeInput(input) {
   const sceneCount = clamp(Number(input.sceneCount || 9), 7, 11);
   const totalParts = clamp(Number(input.totalParts || 10), 7, 13);
   const partNumber = clamp(Number(input.partNumber || 1), 1, totalParts);
+  const seasonTitle = cleanText(input.seasonTitle || input.episodeTitle || "", 100);
   return {
     idea: cleanText(input.idea || "Di rumah kosong dekat sawah, ada suara perempuan menyanyi dari sumur tua setiap malam Jumat.", 1200),
-    episodeTitle: cleanText(input.episodeTitle || "", 100),
+    seasonTitle,
+    episodeTitle: seasonTitle,
     protagonistName: cleanText(input.protagonistName || "Andi", 40),
     protagonistProfile: cleanText(input.protagonistProfile || defaultCharacter, 360),
     theme: cleanText(input.theme || "kos", 40),
@@ -248,10 +250,12 @@ function normalizeMemory(context) {
   const stories = Array.isArray(context.existingStories) ? context.existingStories : [];
   const recent = stories.slice(0, 30).map((story) => ({
     title: cleanText(story?.title || story?.plan?.title || "", 90),
+    seasonTitle: cleanText(story?.plan?.season?.title || story?.plan?.episode?.title || story?.input?.seasonTitle || story?.input?.episodeTitle || "", 100),
     episodeTitle: cleanText(story?.plan?.episode?.title || story?.input?.episodeTitle || "", 100),
+    currentEpisode: Number(story?.plan?.season?.currentEpisode || story?.plan?.episode?.currentPart || story?.input?.partNumber || 0),
     partTitle: cleanText(story?.plan?.episode?.partTitle || "", 100),
     partNumber: Number(story?.plan?.episode?.currentPart || story?.input?.partNumber || 0),
-    outline: story?.plan?.episode?.partOutline,
+    outline: story?.plan?.season?.episodeOutline || story?.plan?.episode?.partOutline,
     logline: cleanText(story?.plan?.logline || story?.input?.idea || "", 180),
     hook: cleanText(story?.plan?.hook || "", 180),
     ending: cleanText(story?.plan?.ending || "", 220),
@@ -270,36 +274,36 @@ function normalizeMemory(context) {
 function buildPrompt(input, memory) {
   const words = narrationWordTarget(input.durationSec);
   const episodeMatches = memory.recent
-    .filter((story) => normalizeKey(story.episodeTitle) === normalizeKey(input.episodeTitle))
-    .sort((a, b) => Number(a.partNumber || 0) - Number(b.partNumber || 0));
-  const previousParts = episodeMatches.filter((story) => Number(story.partNumber || 0) > 0 && Number(story.partNumber || 0) < input.partNumber);
+    .filter((story) => normalizeKey(story.seasonTitle || story.episodeTitle) === normalizeKey(input.seasonTitle || input.episodeTitle))
+    .sort((a, b) => Number(a.currentEpisode || a.partNumber || 0) - Number(b.currentEpisode || b.partNumber || 0));
+  const previousParts = episodeMatches.filter((story) => Number(story.currentEpisode || story.partNumber || 0) > 0 && Number(story.currentEpisode || story.partNumber || 0) < input.partNumber);
   const matchingEpisode = episodeMatches.at(-1);
   const latestPrevious = previousParts.at(-1);
   const existingOutline = Array.isArray(matchingEpisode?.outline)
     ? [
-        "Outline episode yang sudah ada, pakai ini sebagai kontinuitas:",
-        ...matchingEpisode.outline.map((part) => `Part ${part.part}: ${part.title} - ${part.summary || part.cliffhanger || ""}`)
+        "Outline Season yang sudah ada, pakai ini sebagai kontinuitas sampai tamat:",
+        ...matchingEpisode.outline.map((part) => `Episode ${part.episode || part.part}: ${part.title} - ${part.summary || part.cliffhanger || ""}`)
       ].join("\n")
     : "";
   const continuity = previousParts.length
     ? [
-        "KONTINUITAS EPISODE WAJIB, JANGAN DILANGGAR:",
-        `Ini adalah part ${input.partNumber} dari episode yang sama. Jangan membuat kasus baru, saksi baru, lokasi utama baru, atau narator baru.`,
+        "KONTINUITAS SEASON WAJIB, JANGAN DILANGGAR:",
+        `Ini adalah Episode ${input.partNumber} dari Season yang sama. Jangan membuat season baru, kasus baru yang terputus, lokasi utama baru, atau narator baru.`,
         `Narator/protagonis tetap: ${latestPrevious?.protagonistName || input.protagonistName}.`,
         latestPrevious?.protagonistProfile ? `Kontinuitas visual protagonis tetap: ${latestPrevious.protagonistProfile}.` : "",
-        "Part saat ini harus mulai setelah cliffhanger/fakta terakhir part sebelumnya, bukan mengulang dari awal.",
+        "Episode saat ini harus mulai setelah cliffhanger/fakta terakhir episode sebelumnya, bukan mengulang dari awal.",
         "Pertahankan relasi sebab-akibat, objek teror utama, tempat utama, dan misteri yang sudah muncul.",
         ...previousParts.map((story) => [
-          `Part ${story.partNumber} yang sudah tayang: ${story.title}`,
+          `Episode ${story.currentEpisode || story.partNumber} yang sudah tayang: ${story.title}`,
           `Logline: ${story.logline}`,
           `Ending/cliffhanger: ${story.ending}`,
           `Ringkasan narasi: ${story.narration}`
         ].filter(Boolean).join("\n"))
       ].filter(Boolean).join("\n")
     : [
-        "KONTINUITAS EPISODE WAJIB:",
-        "Karena ini part 1, buat fondasi episode yang stabil untuk semua part berikutnya: narator/protagonis, lokasi utama, objek teror, aturan gangguan, dan cliffhanger yang bisa dilanjutkan.",
-        "Jangan membuat part 1 terasa seperti cerita selesai. Simpan misteri utama agar part 2 sampai tamat tetap bisa menyambung dari kejadian yang sama."
+        "KONTINUITAS SEASON WAJIB:",
+        "Karena ini Episode 1, buat fondasi Season yang stabil untuk semua episode berikutnya: narator/protagonis, lokasi utama, objek teror, aturan gangguan, dan cliffhanger yang bisa dilanjutkan.",
+        "Jangan membuat Episode 1 terasa seperti cerita selesai. Simpan misteri utama agar Episode 2 sampai tamat tetap bisa menyambung dari kejadian yang sama."
       ].join("\n");
   const avoid = memory.recent.length
     ? [
@@ -308,40 +312,42 @@ function buildPrompt(input, memory) {
       ].join("\n")
     : "Belum ada riwayat cerita, tetap buat plot yang spesifik dan tidak generik.";
   return [
-    "Buat rencana 1 video short sebagai bagian dari 1 episode cerita mistis vertikal bahasa Indonesia.",
+    "Buat rencana 1 video short sebagai 1 Episode dari 1 Season cerita mistis vertikal bahasa Indonesia.",
     "Konten harus original, cinematic, tidak gore, tidak memakai figur publik nyata, dan cocok untuk YouTube Shorts, Facebook Reels, Instagram Reels.",
     "Tulis sebagai storyteller horror yang sedang menceritakan pengalaman pribadi secara live. Jangan terdengar seperti sinopsis, berita, atau instruksi produksi.",
     "Bayangkan naratornya manusia biasa yang takut tapi mencoba tetap bicara pelan ke penonton. Narasi harus punya rasa hadir di lokasi.",
-    "Cerita harus membuat penonton merasa ada sesuatu yang salah sejak awal, lalu rasa takutnya naik pelan sampai ujung part.",
+    "Cerita harus membuat penonton merasa ada sesuatu yang salah sejak awal, lalu rasa takutnya naik pelan sampai ujung episode.",
     ...narrationStyleRules,
     "Kembalikan JSON valid saja dengan shape:",
-    "{ title, logline, hook, ending, episode:{ title, totalParts, currentPart, partTitle, arcSummary, partOutline:[{ part, title, summary, cliffhanger }] }, scenes:[{ index, durationSec, narration, screenText, imagePrompt, transition, effect, soundDesign }] }",
-    "Episode besar harus punya outline sesuai Total part, minimal 7 part dan maksimal 13 part. Script scenes hanya untuk Current part.",
-    "Durasi video current part harus 1 sampai 2 menit, dan jangan melewati durasi yang diminta.",
-    `Total narasi current part sekitar ${words.min}-${words.max} kata agar TTS terdengar santai, punya jeda, dan tidak dipaksa dipercepat.`,
+    "{ title, logline, hook, ending, season:{ title, totalEpisodes, currentEpisode, episodeTitle, arcSummary, episodeOutline:[{ episode, title, summary, cliffhanger, storyboards:[string] }] }, episode:{ title, totalParts, currentPart, partTitle, arcSummary, partOutline:[{ part, title, summary, cliffhanger, storyboards:[string] }] }, scenes:[{ index, durationSec, narration, screenText, imagePrompt, transition, effect, soundDesign }] }",
+    "Top-level title harus judul current episode, bukan judul Season. season.title adalah judul besar Season.",
+    "Season besar wajib punya outline lengkap 10 episode dari awal sampai tamat. Setiap item episodeOutline wajib berisi 8-10 storyboard beat singkat, jadi total Season terencana sekitar 100 storyboard. Script scenes detail tetap hanya untuk current episode.",
+    "Setiap episode punya 8-10 storyboard/scene yang nyambung dengan episode sebelum dan sesudahnya.",
+    "Durasi video current episode harus 1 sampai 2 menit, dan jangan melewati durasi yang diminta.",
+    `Total narasi current episode sekitar ${words.min}-${words.max} kata agar TTS terdengar santai, punya jeda, dan tidak dipaksa dipercepat.`,
     "Hook harus langsung memancing rasa penasaran, tetapi narration scene 1 tetap mulai dari kejadian, bukan promosi.",
     "Setiap narration harus terasa seperti ucapan yang bisa direkam langsung: ada rasa spontan, tapi tetap jelas dan tidak bertele-tele.",
     "Bayangkan semua narration akan digabung menjadi satu audio TTS. Karena itu alurnya harus nyambung, tanpa lompatan bahasa yang terasa ditempel.",
-    "Jangan tulis kalimat seperti: bersambung, akan berlanjut, lanjut di part berikutnya, tunggu part berikutnya, atau summary penutup. Akhiri part dengan beat cerita natural.",
+    "Jangan tulis kalimat seperti: bersambung, akan berlanjut, lanjut di episode berikutnya, tunggu episode berikutnya, atau summary penutup. Akhiri episode dengan beat cerita natural.",
     "Setiap scene wajib punya momen visual berbeda, supaya gambar tidak kembar.",
     ...visualVarietyRules,
     "ScreenText harus pendek, seperti judul beat visual, bukan kalimat panjang.",
     `Detail tokoh utama hanya untuk kontinuitas visual di imagePrompt saat skrip benar-benar butuh orang: ${input.protagonistProfile}.`,
-    "Detail tokoh seperti umur, rambut, wajah, jaket, kaos, celana, sepatu, HP, dan senter tidak boleh muncul di narration, hook, logline, ending, screenText, atau part outline.",
+    "Detail tokoh seperti umur, rambut, wajah, jaket, kaos, celana, sepatu, HP, dan senter tidak boleh muncul di narration, hook, logline, ending, screenText, atau season outline.",
     `Kalau narration menyebut tokoh, pakai gaya natural seperti: '${input.protagonistName} berada di depan sumur tua' atau '${input.protagonistName} menahan napas di lorong gelap'.`,
     "Visual harus mengikuti skrip, bukan memaksa tokoh muncul. Kalau adegan berupa suara, benda, lorong, sumur, pintu, HP, sawah, refleksi, atau bayangan, imagePrompt harus berupa POV/objek/suasana tanpa wajah dan tanpa badan penuh.",
     "Jangan menambahkan sosok manusia, hantu berbentuk manusia, atau figur orang tambahan kecuali skrip eksplisit menyebut ada sosok terlihat. Kalau ada orang terlihat, gunakan hanya karakter yang disebut dalam skrip.",
     "Untuk video 8 scene, maksimal 2 scene boleh menampilkan tokoh utama secara jelas. Sisanya harus insert shot/POV/establishing shot. Kalau tokoh utama muncul, imagePrompt wajib menyebut nama, umur, outfit, smartphone, dan senter kecil yang sama.",
     "Untuk adegan sumur: tampilkan sosok di samping/dekat sumur atau refleksi aman di air; jangan tampilkan orang jatuh, tubuh terjebak, tenggelam, atau berada di dalam sumur.",
     `Ide: ${input.idea}`,
-    `Judul episode opsional: ${input.episodeTitle || "buatkan judul episode yang kuat"}`,
+    `Judul Season opsional: ${input.seasonTitle || "buatkan judul Season yang kuat"}`,
     `Tema: ${input.theme}`,
     `Tone: ${input.tone}`,
-    `Durasi current part: ${input.durationSec} detik`,
+    `Durasi current episode: ${input.durationSec} detik`,
     `Jumlah scene: ${input.sceneCount}`,
-    `Current part: ${input.partNumber}`,
-    `Total part episode: ${input.totalParts}`,
-    matchingEpisode ? `Episode ini sudah punya part sebelumnya. Pertahankan kontinuitas dunia, tokoh, dan misteri, tapi tulis hanya part ${input.partNumber}.` : "",
+    `Current episode: ${input.partNumber}`,
+    `Total episode Season: ${input.totalParts}`,
+    matchingEpisode ? `Season ini sudah punya episode sebelumnya. Pertahankan kontinuitas dunia, tokoh, dan misteri, tapi tulis hanya Episode ${input.partNumber}.` : "",
     continuity,
     existingOutline,
     avoid,
@@ -369,9 +375,12 @@ function normalizePlan(plan, input, memory) {
       imagePrompt: `${fallbackScene.imagePrompt}, continuation beat ${scenes.length + 1}`
     });
   }
-  const title = makeUniqueTitle(cleanText(plan?.title || fallback.title, 80), memory, input);
   const durations = distributeDurations(input.durationSec, Math.min(input.sceneCount, scenes.length));
-  const episode = normalizeEpisode(plan?.episode, fallback.episode, title, input);
+  const seasonSource = plan?.season || plan?.episode;
+  const fallbackSeason = fallback.season || fallback.episode;
+  const episode = normalizeEpisode(seasonSource, fallbackSeason, cleanText(plan?.title || fallback.title, 80), input);
+  const season = seasonFromEpisode(episode);
+  const title = cleanText(plan?.title || season.episodeTitle || fallback.title, 80);
   const selectedScenes = scenes.slice(0, input.sceneCount);
   const characterSceneIndexes = selectCharacterSceneIndexes(selectedScenes, input);
   return {
@@ -379,6 +388,7 @@ function normalizePlan(plan, input, memory) {
     logline: sanitizeNarrationForSpeech(stripContinuationLanguage(cleanText(plan?.logline || fallback.logline, 240)), input),
     hook: sanitizeNarrationForSpeech(stripContinuationLanguage(cleanText(plan?.hook || fallback.hook, 240)), input),
     ending: sanitizeNarrationForSpeech(stripContinuationLanguage(cleanText(plan?.ending || fallback.ending, 240)), input),
+    season,
     episode,
     scenes: selectedScenes.map((scene, index) => normalizeScene({
       ...scene,
@@ -605,10 +615,11 @@ function fallbackPlan(input, memory = { titles: new Set() }) {
   });
 
   return {
-    title: makeUniqueTitle(template.title, memory, input),
+    title: fallbackEpisodeTitle(template, input),
     logline: template.logline,
     hook: template.hook,
     ending: template.ending,
+    season: seasonFromEpisode(buildFallbackEpisode(template, input)),
     episode: buildFallbackEpisode(template, input),
     scenes
   };
@@ -616,13 +627,13 @@ function fallbackPlan(input, memory = { titles: new Set() }) {
 
 function normalizeEpisode(raw, fallback, title, input) {
   const source = raw || {};
-  const partOutline = normalizePartOutline(source.partOutline || fallback?.partOutline, input);
+  const partOutline = normalizePartOutline(source.episodeOutline || source.partOutline || fallback?.episodeOutline || fallback?.partOutline, input);
   return {
-    title: cleanText(input.episodeTitle || source.title || fallback?.title || title, 100),
+    title: cleanText(input.seasonTitle || source.title || fallback?.title || title, 100),
     totalParts: input.totalParts,
     currentPart: input.partNumber,
-    partTitle: cleanText(source.partTitle || fallback?.partTitle || title, 100),
-    arcSummary: sanitizeNarrationForSpeech(cleanText(source.arcSummary || fallback?.arcSummary || "Satu episode mistis panjang yang dibagi menjadi beberapa part short.", 420), input),
+    partTitle: cleanText(source.episodeTitle || source.partTitle || fallback?.episodeTitle || fallback?.partTitle || title, 100),
+    arcSummary: sanitizeNarrationForSpeech(cleanText(source.arcSummary || fallback?.arcSummary || "Satu season mistis panjang yang dibagi menjadi sepuluh episode short.", 420), input),
     partOutline
   };
 }
@@ -634,17 +645,36 @@ function normalizePartOutline(outline, input) {
     const part = index + 1;
     return {
       part,
-      title: cleanText(item.title || `Part ${part}`, 80),
+      episode: part,
+      title: cleanText(item.title || `Episode ${part}`, 80),
       summary: sanitizeNarrationForSpeech(cleanText(item.summary || defaultPartSummary(part, input), 220), input),
-      cliffhanger: sanitizeNarrationForSpeech(stripContinuationLanguage(cleanText(item.cliffhanger || defaultPartCliffhanger(part, input), 180)), input)
+      cliffhanger: sanitizeNarrationForSpeech(stripContinuationLanguage(cleanText(item.cliffhanger || defaultPartCliffhanger(part, input), 180)), input),
+      storyboards: normalizeOutlineStoryboards(item.storyboards, part, input)
     };
   });
   return items;
 }
 
+function normalizeOutlineStoryboards(storyboards, part, input) {
+  const list = Array.isArray(storyboards) ? storyboards : [];
+  const normalized = list
+    .map((item) => cleanText(item, 90))
+    .filter(Boolean)
+    .slice(0, 10);
+  while (normalized.length < 8) {
+    normalized.push(defaultStoryboardBeat(part, normalized.length + 1, input));
+  }
+  return normalized;
+}
+
+function defaultStoryboardBeat(part, beat, input) {
+  const focus = input.theme === "jalan" ? "jalan kosong dan kendaraan terakhir" : input.theme === "kos" ? "lorong dan kamar yang tidak beres" : "tempat utama yang makin dingin";
+  return `Episode ${part} beat ${beat}: ${focus} membuka petunjuk baru`;
+}
+
 function defaultPartSummary(part, input) {
   const focus = input.theme === "rumah" ? "rumah kosong, sumur, dan jendela gelap" : "gangguan utama";
-  if (part === input.totalParts) return `Misteri ${focus} mencapai titik akhir dan semua tanda dari part sebelumnya kembali menyatu.`;
+  if (part === input.totalParts) return `Misteri ${focus} mencapai titik akhir dan semua tanda dari episode sebelumnya kembali menyatu.`;
   return `Gangguan dari ${focus} makin dekat, meninggalkan petunjuk baru yang membuat tokoh utama sulit mundur.`;
 }
 
@@ -662,17 +692,19 @@ function defaultPartCliffhanger(part, input) {
 }
 
 function buildFallbackEpisode(template, input) {
-  const title = input.episodeTitle || template.title;
+  const title = input.seasonTitle || template.title;
   const partOutline = Array.from({ length: input.totalParts }, (_, index) => {
     const part = index + 1;
     const isFinal = part === input.totalParts;
     return {
       part,
-      title: part === 1 ? `${template.title}: Awal Gangguan` : `${template.title}: Part ${part}`,
+      episode: part,
+      title: part === 1 ? `${template.title}: Awal Gangguan` : `${template.title}: Episode ${part}`,
       summary: isFinal
-        ? "Rahasia utama terbuka dan semua tanda dari part sebelumnya kembali dalam satu konfrontasi terakhir."
-        : `Gangguan dari objek utama semakin dekat, membuka petunjuk baru dan risiko yang lebih personal di part ${part}.`,
-      cliffhanger: defaultPartCliffhanger(part, input)
+        ? "Rahasia utama terbuka dan semua tanda dari episode sebelumnya kembali dalam satu konfrontasi terakhir."
+        : `Gangguan dari objek utama semakin dekat, membuka petunjuk baru dan risiko yang lebih personal di episode ${part}.`,
+      cliffhanger: defaultPartCliffhanger(part, input),
+      storyboards: normalizeOutlineStoryboards([], part, input)
     };
   });
   return {
@@ -680,9 +712,32 @@ function buildFallbackEpisode(template, input) {
     totalParts: input.totalParts,
     currentPart: input.partNumber,
     partTitle: partOutline[input.partNumber - 1]?.title || template.title,
-    arcSummary: `${template.logline} Episode ini dibagi menjadi ${input.totalParts} part short dengan fokus misteri bertahap.`,
+    arcSummary: `${template.logline} Season ini dibagi menjadi ${input.totalParts} episode short dengan fokus misteri bertahap.`,
     partOutline
   };
+}
+
+function seasonFromEpisode(episode) {
+  const outline = Array.isArray(episode?.partOutline) ? episode.partOutline : [];
+  return {
+    title: episode?.title || "",
+    totalEpisodes: episode?.totalParts || 10,
+    currentEpisode: episode?.currentPart || 1,
+    episodeTitle: episode?.partTitle || "",
+    arcSummary: episode?.arcSummary || "",
+    episodeOutline: outline.map((item) => ({
+      episode: item.episode || item.part,
+      title: item.title,
+      summary: item.summary,
+      cliffhanger: item.cliffhanger,
+      storyboards: item.storyboards || []
+    }))
+  };
+}
+
+function fallbackEpisodeTitle(template, input) {
+  if (input.partNumber <= 1) return `${template.title}: Awal Gangguan`;
+  return `${template.title}: Episode ${input.partNumber}`;
 }
 
 function pickFallbackTemplate(input, memory) {
@@ -723,7 +778,7 @@ function distributeDurations(totalSec, sceneCount) {
 
 function stripContinuationLanguage(value) {
   return cleanText(value || "", 900)
-    .replace(/\b(bersambung|akan berlanjut|lanjut di part berikutnya|tunggu part berikutnya|part berikutnya)\b[.!…]*/gi, "")
+    .replace(/\b(bersambung|akan berlanjut|lanjut di part berikutnya|tunggu part berikutnya|part berikutnya|lanjut di episode berikutnya|tunggu episode berikutnya|episode berikutnya)\b[.!…]*/gi, "")
     .replace(/\s+/g, " ")
     .trim();
 }

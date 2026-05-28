@@ -25,17 +25,17 @@ export async function uploadNextPart() {
   const ignoreTodayGuard = truthyEnv("MISTIS_IGNORE_TODAY_GUARD");
   const resetEpisodeState = forceNewPart && !isAutoForcedPartNumber() && forcedPartNumber() === 1 && truthyEnv("MISTIS_RESET_EPISODE_STATE");
   if (resetEpisodeState) {
-    console.log("MISTIS_RESET_EPISODE_STATE=true, clearing local imported story state before generating a clean part 1.");
+    console.log("MISTIS_RESET_EPISODE_STATE=true, clearing local imported story state before generating a clean Season episode 1.");
     await saveStories([]);
     stories = [];
   }
   const dueRetry = stories.find((story) => story.status === "rendered" && story.publish?.state === "failed" && isDue(story.publish.nextAttemptAt) && isPublishReady(story));
   if (!forceNewPart && !ignoreTodayGuard && !dueRetry && uploadedToday(stories)) {
-    return { ok: false, skipped: true, reason: "Part hari ini sudah uploaded. Retry gagal tetap akan diproses saat due." };
+    return { ok: false, skipped: true, reason: "Episode hari ini sudah uploaded. Retry gagal tetap akan diproses saat due." };
   }
   let candidate = null;
   if (forceNewPart) {
-    console.log(`MISTIS_FORCE_NEW_PART=true, generating a fresh part ${forcedPartNumber()} on this runner.`);
+    console.log(`MISTIS_FORCE_NEW_PART=true, generating a fresh episode ${forcedPartNumber()} on this runner.`);
     const generated = await generateForcedPart(stories);
     candidate = generated.story;
   } else {
@@ -45,7 +45,7 @@ export async function uploadNextPart() {
     const generated = await generateNextSequentialPart(stories);
     candidate = generated.story;
   }
-  if (!candidate) return { ok: false, skipped: true, reason: "Tidak ada part rendered yang siap upload berurutan." };
+  if (!candidate) return { ok: false, skipped: true, reason: "Tidak ada episode rendered yang siap upload berurutan." };
 
   try {
     if (remoteEnabled()) {
@@ -145,7 +145,8 @@ async function generateNextSequentialPart(stories) {
   const partNumber = active?.nextPart || 1;
   const input = {
     idea: process.env.MISTIS_IDEA || generatedIdea.idea,
-    episodeTitle: active?.title || "",
+    seasonTitle: active?.title || process.env.MISTIS_SEASON_TITLE || process.env.MISTIS_EPISODE_TITLE || "",
+    episodeTitle: active?.title || process.env.MISTIS_SEASON_TITLE || process.env.MISTIS_EPISODE_TITLE || "",
     protagonistName: process.env.MISTIS_PROTAGONIST_NAME || generatedIdea.protagonistName,
     protagonistProfile: process.env.MISTIS_PROTAGONIST_PROFILE || generatedIdea.protagonistProfile,
     theme: process.env.MISTIS_THEME || generatedIdea.theme,
@@ -169,7 +170,8 @@ async function generateForcedPart(stories) {
   const partNumber = Math.max(1, Math.min(forcedPartNumber(active?.nextPart || 1), totalParts));
   const input = {
     idea: process.env.MISTIS_IDEA || generatedIdea.idea,
-    episodeTitle: process.env.MISTIS_EPISODE_TITLE || active?.title || "",
+    seasonTitle: process.env.MISTIS_SEASON_TITLE || process.env.MISTIS_EPISODE_TITLE || active?.title || "",
+    episodeTitle: process.env.MISTIS_SEASON_TITLE || process.env.MISTIS_EPISODE_TITLE || active?.title || "",
     protagonistName: process.env.MISTIS_PROTAGONIST_NAME || generatedIdea.protagonistName,
     protagonistProfile: process.env.MISTIS_PROTAGONIST_PROFILE || generatedIdea.protagonistProfile,
     theme: process.env.MISTIS_THEME || generatedIdea.theme,
@@ -195,10 +197,10 @@ function findActiveEpisode(stories) {
     groups.get(title).push(story);
   }
   const candidates = [...groups.entries()].map(([title, group]) => {
-    const totalParts = clampPartTotal(Math.max(...group.map((story) => Number(story.plan?.episode?.totalParts || story.input?.totalParts || 0))));
+    const totalParts = clampPartTotal(Math.max(...group.map((story) => Number(story.plan?.season?.totalEpisodes || story.plan?.episode?.totalParts || story.input?.totalParts || 0))));
     const uploaded = new Set(group
       .filter((story) => story.publish?.state === "uploaded")
-      .map((story) => Number(story.plan?.episode?.currentPart || story.input?.partNumber || 0))
+      .map((story) => Number(story.plan?.season?.currentEpisode || story.plan?.episode?.currentPart || story.input?.partNumber || 0))
       .filter(Boolean));
     let nextPart = 1;
     while (uploaded.has(nextPart) && nextPart < totalParts) nextPart += 1;
@@ -206,13 +208,13 @@ function findActiveEpisode(stories) {
     const newest = Math.max(...group.map((story) => new Date(story.updatedAt || story.createdAt || 0).getTime()).filter(Number.isFinite));
     const base = group[0] || {};
     return {
-      title: base.plan?.episode?.title || base.input?.episodeTitle || title,
+      title: base.plan?.season?.title || base.plan?.episode?.title || base.input?.seasonTitle || base.input?.episodeTitle || title,
       totalParts,
       nextPart,
       complete,
       newest,
       idea: {
-        idea: base.input?.idea || base.plan?.episode?.arcSummary || base.plan?.logline,
+        idea: base.input?.idea || base.plan?.season?.arcSummary || base.plan?.episode?.arcSummary || base.plan?.logline,
         protagonistName: base.input?.protagonistName || "Aku",
         protagonistProfile: base.input?.protagonistProfile || "",
         theme: base.input?.theme || "rumah",
@@ -253,14 +255,14 @@ function randomEpisodeSeed(stories) {
   const place = places[index % places.length];
   const fear = fears[(index + 2) % fears.length];
   return {
-    idea: `Buat episode serial Memori Misteri original tentang ${protagonistName} yang mengalami gangguan di ${place}. Teror utama dimulai dari ${fear}, lalu setiap part membuka petunjuk baru tanpa kehilangan rasa cerita nyata.`,
+    idea: `Buat Season 1 serial Memori Misteri original tentang ${protagonistName} yang mengalami gangguan di ${place}. Teror utama dimulai dari ${fear}, lalu setiap episode membuka petunjuk baru tanpa kehilangan rasa cerita nyata sampai episode 10 selesai.`,
     protagonistName,
     protagonistProfile: `${protagonistName}, orang Indonesia dewasa, wajah lelah tapi penasaran, pakaian gelap sederhana, membawa HP dan senter kecil untuk kontinuitas visual`,
     theme,
     tone: "seram pelan, rapi, terasa seperti cerita pengalaman nyata, twist bertahap, tidak gore",
     durationSec: 75 + ((index * 7) % 36),
     sceneCount: 8 + (index % 3),
-    totalParts: 7 + (index % 7),
+    totalParts: 10,
     ttsStyle: styles[index % styles.length]
   };
 }
@@ -309,17 +311,21 @@ function comparePart(a, b) {
 }
 
 function storyPartNumber(story) {
-  const value = Number(story.plan?.episode?.currentPart || story.input?.partNumber || 1);
+  const value = Number(story.plan?.season?.currentEpisode || story.plan?.episode?.currentPart || story.input?.partNumber || 1);
   return Number.isFinite(value) ? value : 1;
 }
 
 function episodeKey(story) {
-  return String(story.plan?.episode?.title || story.input?.episodeTitle || story.title || "").toLowerCase();
+  return String(story.plan?.season?.title || story.plan?.episode?.title || story.input?.seasonTitle || story.input?.episodeTitle || story.title || "").toLowerCase();
 }
 
 function partKey(story) {
+  const season = story.plan?.season || {};
   const episode = story.plan?.episode || {};
-  return episode.currentPart ? `${episode.title} part ${episode.currentPart}/${episode.totalParts}` : story.title;
+  const current = season.currentEpisode || episode.currentPart;
+  const total = season.totalEpisodes || episode.totalParts;
+  const title = season.title || episode.title || story.title;
+  return current ? `${title} episode ${current}/${total}` : story.title;
 }
 
 function isDue(value) {
@@ -373,8 +379,11 @@ function localDateKey(date) {
 }
 
 function socialDescription(story) {
+  const season = story.plan?.season || {};
   const episode = story.plan?.episode || {};
-  const part = episode.currentPart ? `Part ${episode.currentPart}/${episode.totalParts}` : "";
+  const current = season.currentEpisode || episode.currentPart;
+  const total = season.totalEpisodes || episode.totalParts;
+  const part = current ? `Episode ${current}/${total}` : "";
   return [
     [story.title, part].filter(Boolean).join(" - "),
     story.plan?.hook || story.plan?.logline || "",

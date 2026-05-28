@@ -19,7 +19,7 @@ export async function createTitleThumbnail(story) {
 
   const titlePath = path.join(workDir, "thumbnail-title.txt");
   const metaPath = path.join(workDir, "thumbnail-meta.txt");
-  await fs.writeFile(titlePath, wrapTitle(story.plan?.episode?.title || story.title || "Memori Misteri"), "utf8");
+  await fs.writeFile(titlePath, wrapTitle(story.plan?.season?.title || story.plan?.episode?.title || story.title || "Memori Misteri"), "utf8");
   await fs.writeFile(metaPath, thumbnailMeta(story), "utf8");
 
   const filename = `${story.id}-thumbnail-${safeFilename(story.title || "title")}.png`;
@@ -63,8 +63,11 @@ function firstImage(story) {
 }
 
 function thumbnailMeta(story) {
+  const season = story.plan?.season || {};
   const episode = story.plan?.episode || {};
-  const part = episode.currentPart ? `PART ${episode.currentPart}/${episode.totalParts || "?"}` : "PART 1";
+  const current = season.currentEpisode || episode.currentPart;
+  const total = season.totalEpisodes || episode.totalParts;
+  const part = current ? `EPISODE ${current}/${total || "?"}` : "EPISODE 1";
   return ["MEMORI MISTERI", part].join("  |  ");
 }
 

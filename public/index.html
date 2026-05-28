@@ -19,7 +19,7 @@
         <nav class="tabs" aria-label="Dashboard">
           <button class="active" type="button" data-tab="overview">Memori Misteri</button>
           <button type="button" data-tab="inbox">Accept Cerita</button>
-          <button type="button" data-tab="episodes">Episode & Part</button>
+          <button type="button" data-tab="episodes">Season & Episode</button>
           <button type="button" data-tab="settings">Settings</button>
         </nav>
         <a class="fan-link" href="/fan.php" target="_blank" rel="noreferrer">Halaman penggemar</a>
@@ -41,16 +41,16 @@
 
         <section id="overview" class="tab-panel active">
           <div class="metric-grid">
-            <div class="metric"><span>Total episode</span><strong id="storyCount">0</strong></div>
+            <div class="metric"><span>Episode dibuat</span><strong id="storyCount">0</strong></div>
             <div class="metric"><span>Antrian cerita</span><strong id="submissionCount">0</strong></div>
             <div class="metric"><span>Upload hari ini</span><strong id="todayUpload">0</strong></div>
             <div class="metric"><span>Retry gagal</span><strong id="retryCount">0</strong></div>
           </div>
           <section class="story-panel">
             <div class="section-head">
-              <h2>Part Aktif</h2>
+              <h2>Episode Aktif</h2>
               <div class="section-actions">
-                <button id="runDailyWorkflowBtn" class="secondary compact-action" type="button">Generate part selanjutnya</button>
+                <button id="runDailyWorkflowBtn" class="secondary compact-action" type="button">Generate episode berikutnya</button>
                 <span id="sourceBadge" class="pill">Auto</span>
               </div>
             </div>
@@ -73,8 +73,8 @@
 
         <section id="episodes" class="tab-panel">
           <div class="section-head">
-            <h2>Episode & Part</h2>
-            <span id="episodeBadge" class="pill">0 part</span>
+            <h2>Season & Episode</h2>
+            <span id="episodeBadge" class="pill">0 episode</span>
           </div>
           <div id="episodeGrid" class="episode-grid"></div>
           <div id="storyList" class="story-list episode-history"></div>

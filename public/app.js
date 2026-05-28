@@ -127,17 +127,17 @@ function renderMetrics() {
 function renderCurrent() {
   const story = state.current;
   if (!story) {
-    els.heroTitle.textContent = "Belum ada part";
-    els.logline.textContent = "Workflow akan membuat part baru saat jadwal berjalan.";
+    els.heroTitle.textContent = "Belum ada episode";
+    els.logline.textContent = "Workflow akan membuat Season baru saat jadwal berjalan.";
     els.flowSteps.innerHTML = "";
     els.videoSlot.textContent = "Belum ada video.";
     return;
   }
-  const episode = story.plan?.episode || {};
-  const part = episode.currentPart ? `Part ${episode.currentPart}/${episode.totalParts}` : "Draft";
-  els.heroTitle.textContent = episode.partTitle || story.title;
+  const season = seasonMeta(story);
+  const part = season.current ? `Episode ${season.current}/${season.total}` : "Draft";
+  els.heroTitle.textContent = season.episodeTitle || story.title;
   els.sourceBadge.textContent = story.publish?.state === "uploaded" ? "Uploaded" : story.publish?.state === "failed" ? "Retry" : "Rendered";
-  els.logline.textContent = [episode.title, part, story.plan?.logline].filter(Boolean).join(" - ");
+  els.logline.textContent = [season.title, part, story.plan?.logline].filter(Boolean).join(" - ");
   const totalScenes = story.plan?.scenes?.length || 0;
   const imageCount = story.assets?.images?.length || 0;
   const steps = [
@@ -201,21 +201,23 @@ function renderSubmissionDetail() {
 
 function renderEpisodes() {
   const grouped = groupByEpisode(state.stories);
-  els.episodeBadge.textContent = `${state.stories.length} part`;
+  els.episodeBadge.textContent = `${state.stories.length} episode`;
   els.episodeGrid.innerHTML = [...grouped.entries()].map(([title, stories]) => {
-    const total = Math.max(...stories.map((story) => Number(story.plan?.episode?.totalParts || story.input?.totalParts || 0)), 0);
+    const total = Math.max(...stories.map((story) => Number(seasonMeta(story).total || 0)), 0);
     const uploaded = stories.filter((story) => story.publish?.state === "uploaded").length;
+    const first = stories[0] || {};
+    const meta = seasonMeta(first);
     return `
       <article class="part-card">
         <span>${uploaded}/${total || stories.length} uploaded</span>
-        <strong>${escapeHtml(title || "Episode tanpa judul")}</strong>
-        <small>${escapeHtml(stories[0]?.plan?.episode?.arcSummary || stories[0]?.plan?.logline || "")}</small>
+        <strong>${escapeHtml(title || "Season tanpa judul")}</strong>
+        <small>${escapeHtml(meta.arcSummary || first.plan?.logline || "")}</small>
       </article>
     `;
-  }).join("") || `<div class="empty-state">Belum ada episode.</div>`;
+  }).join("") || `<div class="empty-state">Belum ada season.</div>`;
   els.storyList.innerHTML = state.stories.map((story) => `
     <button type="button" data-id="${story.id}">
-      <strong>${escapeHtml(story.plan?.episode?.partTitle || story.title)}</strong>
+      <strong>${escapeHtml(seasonMeta(story).episodeTitle || story.title)}</strong>
       <span>${escapeHtml(partLabel(story))} - ${escapeHtml(story.publish?.state || story.status || "draft")}</span>
     </button>
   `).join("");
@@ -254,7 +256,7 @@ async function storyFromCurrentSubmission() {
 
 async function runDailyPartWorkflow() {
   if (state.busy) return;
-  if (!confirm("Jalankan workflow Mistis Daily Part sekarang? Ini sama seperti jadwal otomatis dan bisa memakai API serta upload sesuai setting workflow.")) return;
+  if (!confirm("Jalankan workflow untuk generate episode berikutnya sekarang? Ini sama seperti jadwal otomatis dan bisa memakai API serta upload sesuai setting workflow.")) return;
   await busy("Menjalankan workflow harian", async () => {
     await fetchJson("/api/workflows/mistis-daily-part", {
       method: "POST",
@@ -303,7 +305,7 @@ function setLamp(el, ok) {
 function groupByEpisode(stories) {
   const map = new Map();
   for (const story of stories) {
-    const key = story.plan?.episode?.title || story.input?.episodeTitle || story.title || "Episode";
+    const key = seasonMeta(story).title || story.title || "Season";
     if (!map.has(key)) map.set(key, []);
     map.get(key).push(story);
   }
@@ -316,8 +318,20 @@ function uploadedToday(story) {
 }
 
 function partLabel(story) {
-  const episode = story.plan?.episode || {};
-  return episode.currentPart ? `Part ${episode.currentPart}/${episode.totalParts}` : "Draft";
+  const season = seasonMeta(story);
+  return season.current ? `Episode ${season.current}/${season.total || "?"}` : "Draft";
+}
+
+function seasonMeta(story) {
+  const season = story?.plan?.season || {};
+  const episode = story?.plan?.episode || {};
+  return {
+    title: season.title || episode.title || story?.input?.seasonTitle || story?.input?.episodeTitle || "",
+    total: Number(season.totalEpisodes || episode.totalParts || story?.input?.totalParts || 0),
+    current: Number(season.currentEpisode || episode.currentPart || story?.input?.partNumber || 0),
+    episodeTitle: season.episodeTitle || episode.partTitle || story?.title || "",
+    arcSummary: season.arcSummary || episode.arcSummary || ""
+  };
 }
 
 function submissionStatus(item) {

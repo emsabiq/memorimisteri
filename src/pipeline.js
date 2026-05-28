@@ -118,13 +118,13 @@ async function createCaptionTiming(story, warnings) {
 function pickTtsVoice(story, provider) {
   const list = provider === "elevenlabs" ? config.elevenlabs.voiceIds : config.openai.ttsVoices;
   const voices = Array.isArray(list) && list.length ? list : [provider === "elevenlabs" ? config.elevenlabs.voiceId : config.openai.ttsVoice];
-  const seed = `${story.plan?.episode?.title || story.title || story.id}:${story.plan?.episode?.currentPart || 1}`;
+  const seed = `${story.plan?.season?.title || story.plan?.episode?.title || story.title || story.id}:${story.plan?.season?.currentEpisode || story.plan?.episode?.currentPart || 1}`;
   return voices[Math.abs(hash(seed)) % voices.length];
 }
 
 function ttsStyleName(story) {
   const styles = ["bisik tegang", "tenang menahan takut", "voice note tengah malam", "narator pelan sinematik", "cemas tapi jelas"];
-  return styles[Math.abs(hash(story.plan?.episode?.title || story.title || story.id)) % styles.length];
+  return styles[Math.abs(hash(story.plan?.season?.title || story.plan?.episode?.title || story.title || story.id)) % styles.length];
 }
 
 function ttsInstructions(story) {

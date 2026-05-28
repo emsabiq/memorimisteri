@@ -155,7 +155,7 @@ export async function renderDraftVideo(story) {
 
 function buildRenderScenes(story, targetDuration) {
   const targetContentDuration = Math.max(8, Number(targetDuration || story.input?.durationSec || 60));
-  const episode = story.plan.episode || {};
+  const episode = story.plan.season || story.plan.episode || {};
   const contentScenes = fitContentScenes(story.plan.scenes, targetContentDuration)
     .map((scene) => ({
       ...scene,
@@ -179,7 +179,7 @@ function renderContentDuration(story, sourceAudioDuration) {
 }
 
 function buildIntroCoverScene(story, firstScene) {
-  const episode = story.plan.episode || {};
+  const episode = story.plan.season || story.plan.episode || {};
   const sourceScene = firstScene || story.plan.scenes?.[0] || {};
   return {
     ...sourceScene,
@@ -198,7 +198,7 @@ function buildIntroCoverScene(story, firstScene) {
 
 function buildEndingScenes(story, lastScene) {
   const sourceScene = lastScene || story.plan.scenes?.at(-1) || {};
-  const episode = story.plan.episode || {};
+  const episode = story.plan.season || story.plan.episode || {};
   return [
     {
       ...sourceScene,
@@ -246,8 +246,10 @@ function headerLabel(episode) {
 }
 
 function partLabel(episode) {
-  if (!episode?.currentPart) return "PART 1";
-  return `PART ${episode.currentPart}/${episode.totalParts || "?"}`;
+  const current = episode?.currentEpisode || episode?.currentPart;
+  const total = episode?.totalEpisodes || episode?.totalParts;
+  if (!current) return "EPISODE 1";
+  return `EPISODE ${current}/${total || "?"}`;
 }
 
 function fitContentScenes(scenes, targetContentDuration) {
@@ -327,18 +329,18 @@ async function createMoodPpm(outputPath, scene) {
 }
 
 async function writeSegmentTextFiles({ story, scene, workDir }) {
-  const episode = story.plan.episode || {};
+  const episode = story.plan.season || story.plan.episode || {};
   const partText = scene.partLabel || partLabel(episode);
   const titleText = scene.kind === "cover"
-    ? (story.plan.episode?.title || scene.storyTitle || story.title)
+    ? (story.plan.season?.title || story.plan.episode?.title || scene.storyTitle || story.title)
     : scene.index === 1
-      ? (story.plan.episode?.title || scene.storyTitle || story.title)
+      ? (story.plan.season?.title || story.plan.episode?.title || scene.storyTitle || story.title)
       : scene.screenText;
   const files = {
     part: path.join(workDir, `scene-${scene.index}-part.txt`),
     title: path.join(workDir, `scene-${scene.index}-title.txt`)
   };
-  await fs.writeFile(files.part, formatLines(partText, 34, 1) || "PART 1");
+  await fs.writeFile(files.part, formatLines(partText, 34, 1) || "EPISODE 1");
   await fs.writeFile(files.title, formatLines(titleText, scene.kind === "cover" ? 15 : scene.index === 1 ? 18 : 21, 2) || story.title);
   return files;
 }
@@ -428,9 +430,9 @@ function segmentTextOverlays({ scene, regularFont, italicFont, partTextFile, tit
   }
 
   return [
-    "drawbox=x=0:y=0:w=iw:h=315:color=black@0.5:t=fill",
-    `drawtext=fontfile='${italicFont}':textfile='${partTextFile}':x=64:y=44:fontsize=40:fontcolor=0xe2c483:line_spacing=8:borderw=1:bordercolor=black@0.85`,
-    `drawtext=fontfile='${regularFont}':textfile='${titleTextFile}':x=64:y=112:fontsize=${scene.index === 1 ? 78 : 68}:fontcolor=0xf7f1e5:line_spacing=13:borderw=4:bordercolor=black@0.92`
+    "drawbox=x=0:y=0:w=iw:h=375:color=black@0.5:t=fill",
+    `drawtext=fontfile='${italicFont}':textfile='${partTextFile}':x=64:y=88:fontsize=40:fontcolor=0xe2c483:line_spacing=8:borderw=1:bordercolor=black@0.85`,
+    `drawtext=fontfile='${regularFont}':textfile='${titleTextFile}':x=64:y=166:fontsize=${scene.index === 1 ? 78 : 68}:fontcolor=0xf7f1e5:line_spacing=13:borderw=4:bordercolor=black@0.92`
   ];
 }
 

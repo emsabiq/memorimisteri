@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       force_new_part:
-        description: Generate a brand-new part on the runner and ignore the already-uploaded-today guard.
+        description: Generate a brand-new Season episode on the runner and ignore the already-uploaded-today guard.
         required: false
         default: false
         type: boolean
@@ -14,7 +14,7 @@ on:
         default: false
         type: boolean
       part_number:
-        description: Part number for a forced new generation, or next for the latest active episode.
+        description: Episode number for a forced new generation, or next for the latest active Season.
         required: false
         default: "next"
         type: string
@@ -28,7 +28,11 @@ on:
         required: false
         default: ""
       episode_title:
-        description: Optional episode title override.
+        description: Optional Season title override.
+        required: false
+        default: ""
+      season_title:
+        description: Optional Season title override. Takes priority over episode_title.
         required: false
         default: ""
       theme:
@@ -44,8 +48,8 @@ on:
         required: false
         default: ""
   schedule:
-    # Starts at 15:00 WIB (08:00 UTC), then retries every 15 minutes until late evening if the part fails.
-    # The runner itself enforces one successful part per local day.
+    # Starts at 15:00 WIB (08:00 UTC), then retries every 15 minutes until late evening if the episode fails.
+    # The runner itself enforces one successful episode per local day.
     - cron: "*/15 8-16 * * *"
 
 concurrency:
@@ -99,7 +103,8 @@ jobs:
       PRODUCER_MUSIC_VOLUME: ${{ secrets.PRODUCER_MUSIC_VOLUME || '0.42' }}
 
       MISTIS_IDEA: ${{ inputs.story_idea || secrets.MISTIS_IDEA }}
-      MISTIS_EPISODE_TITLE: ${{ inputs.episode_title || secrets.MISTIS_EPISODE_TITLE }}
+      MISTIS_SEASON_TITLE: ${{ inputs.season_title || inputs.episode_title || secrets.MISTIS_SEASON_TITLE || secrets.MISTIS_EPISODE_TITLE }}
+      MISTIS_EPISODE_TITLE: ${{ inputs.season_title || inputs.episode_title || secrets.MISTIS_SEASON_TITLE || secrets.MISTIS_EPISODE_TITLE }}
       MISTIS_TOTAL_PARTS: ${{ secrets.MISTIS_TOTAL_PARTS }}
       MISTIS_THEME: ${{ inputs.theme || secrets.MISTIS_THEME }}
       MISTIS_DURATION: ${{ inputs.duration || secrets.MISTIS_DURATION }}
@@ -156,6 +161,7 @@ jobs:
             echo "force_part_number=${MISTIS_FORCE_PART_NUMBER:-next}"
             echo "reset_episode_state=${MISTIS_RESET_EPISODE_STATE:-false}"
             echo "story_idea_configured=$([ -n "$MISTIS_IDEA" ] && echo yes || echo no)"
+            echo "season_title_configured=$([ -n "$MISTIS_SEASON_TITLE" ] && echo yes || echo no)"
             echo "theme=${MISTIS_THEME:-auto}"
             echo "duration=${MISTIS_DURATION:-auto}"
             echo "scenes=${MISTIS_SCENES:-auto}"
@@ -215,7 +221,7 @@ jobs:
             .map((story) => ({
               id: story.id,
               title: story.title,
-              part: story.plan?.episode?.currentPart || story.input?.partNumber || "",
+              episode: story.plan?.season?.currentEpisode || story.plan?.episode?.currentPart || story.input?.partNumber || "",
               uploadedAt: story.publish.uploadedAt
             }));
           console.log(JSON.stringify({
@@ -226,7 +232,7 @@ jobs:
           }, null, 2));
           EOF
 
-      - name: Generate, upload, and publish one due part
+      - name: Generate, upload, and publish one due episode
         shell: bash
         run: |
           set -o pipefail
@@ -237,7 +243,7 @@ jobs:
         shell: bash
         run: |
           {
-            echo "## Mistis Daily Part"
+            echo "## Mistis Daily Episode"
             echo ""
             echo "- Run ID: \`$GITHUB_RUN_ID\`"
             echo "- Ref: \`$GITHUB_REF\`"
@@ -267,7 +273,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: mistis-daily-part-logs-${{ github.run_id }}
+          name: mistis-daily-episode-logs-${{ github.run_id }}
           path: github-run-logs/
           if-no-files-found: warn
           retention-days: 14
