@@ -5,6 +5,7 @@ const state = {
   submissions: [],
   current: null,
   currentSubmission: null,
+  studioOpenEpisode: Number(sessionStorage.getItem("mistisStudioOpenEpisode") || 0),
   busy: false
 };
 
@@ -409,16 +410,34 @@ function renderStudio() {
     const videoReady = Boolean(story?.assets?.video?.url || story?.assets?.video?.path);
     const isUploaded = story?.publish?.state === "uploaded";
     const stateLabel = isUploaded ? "Uploaded" : videoReady ? "Video siap" : storyReady ? "Outline siap" : "Butuh storyboard";
+    const isOpen = state.studioOpenEpisode === item.episode;
     return `
       <article class="studio-card ${isUploaded ? "done" : videoReady ? "ready" : storyReady ? "planned" : "missing"}">
-        <span>Episode ${item.episode}/${total}</span>
-        <strong>${escapeHtml(item.title || `Episode ${item.episode}`)}</strong>
-        <small>${item.storyboards.length} storyboard</small>
-        <p>${escapeHtml((item.summary || item.storyboards.slice(0, 2).join(" - ")).slice(0, 180))}</p>
-        <em>${escapeHtml(stateLabel)}</em>
+        <button class="studio-card-toggle" type="button" data-episode="${item.episode}" aria-expanded="${isOpen}">
+          <span>Episode ${item.episode}/${total}</span>
+          <strong>${escapeHtml(item.title || `Episode ${item.episode}`)}</strong>
+          <small>${item.storyboards.length} storyboard</small>
+          <p>${escapeHtml((item.summary || item.storyboards.slice(0, 2).join(" - ")).slice(0, 180))}</p>
+          <em>${escapeHtml(isOpen ? "Hide storyboard" : stateLabel)}</em>
+        </button>
+        ${isOpen ? `
+          <ol class="storyboard-list">
+            ${item.storyboards.map((beat) => `<li>${escapeHtml(beat)}</li>`).join("") || "<li>Storyboard belum tersedia.</li>"}
+          </ol>
+          <button class="storyboard-hide secondary compact-action" type="button" data-episode="0">Hide storyboard</button>
+        ` : ""}
       </article>
     `;
   }).join("");
+  els.studioGrid.querySelectorAll("[data-episode]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const episode = Number(button.dataset.episode || 0);
+      state.studioOpenEpisode = state.studioOpenEpisode === episode ? 0 : episode;
+      if (!episode) state.studioOpenEpisode = 0;
+      sessionStorage.setItem("mistisStudioOpenEpisode", String(state.studioOpenEpisode));
+      renderStudio();
+    });
+  });
 }
 
 function seasonMeta(story) {

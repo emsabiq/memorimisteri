@@ -52,7 +52,7 @@ const storyModels = listEnv(
   process.env.DINOIKI_STORY_MODELS ||
   process.env.STORY_MODEL ||
   process.env.DINOIKI_STORY_MODEL ||
-  (hasCustomStoryProvider ? "gpt.5.5,opus-4.7" : "gpt-4.1-mini")
+  (hasCustomStoryProvider ? "gpt-5.4,gpt-5.3-chat,gpt-4.1" : "gpt-4.1-mini")
 );
 
 export const paths = {
@@ -82,6 +82,7 @@ export const config = {
     baseUrl: storyBaseUrl,
     model: storyModels[0] || "gpt-4.1-mini",
     models: storyModels.length ? storyModels : ["gpt-4.1-mini"],
+    maxCompletionTokens: Math.max(500, Math.floor(numberEnv("STORY_MAX_COMPLETION_TOKENS", 12000))),
     provider: storyBaseUrl.includes("dinoiki") ? "dinoiki" : hasCustomStoryProvider ? "custom" : "openai"
   },
   openai: {

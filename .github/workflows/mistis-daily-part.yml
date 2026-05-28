@@ -83,8 +83,8 @@ jobs:
       SOCIAL_ACCOUNT_NAME: memorimisteri
 
       STORY_API_KEY: ${{ secrets.DINOIKI_API_KEY || secrets.STORY_API_KEY || secrets.OPENAI_API_KEY }}
-      STORY_BASE_URL: ${{ secrets.STORY_BASE_URL || 'https://ai.dinoiki.com' }}
-      STORY_MODELS: ${{ secrets.STORY_MODELS || secrets.STORY_MODEL || 'gpt.5.5,opus-4.7' }}
+      STORY_BASE_URL: ${{ secrets.STORY_BASE_URL || 'https://ai.dinoiki.com/v1' }}
+      STORY_MODELS: ${{ secrets.STORY_MODELS || secrets.STORY_MODEL || 'gpt-5.4,gpt-5.3-chat,gpt-4.1' }}
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
       OPENAI_BASE_URL: ${{ secrets.OPENAI_BASE_URL }}
       STORY_MODEL: ${{ secrets.STORY_MODEL }}

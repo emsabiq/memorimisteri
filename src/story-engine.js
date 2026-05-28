@@ -476,28 +476,10 @@ function enhancePrompt(prompt, input, index, options = {}) {
 }
 
 function visualAnchor(input, prompt, index) {
-  const text = `${input.idea || ""} ${input.episodeTitle || ""} ${prompt || ""}`.toLowerCase();
-  if (/\bangkot|mobil|sopir|halte|spion|penumpang|jalan\b/i.test(text)) {
-    return [
-      "empty angkot at a lonely roadside stop",
-      "wet money and a trembling hand near the dashboard",
-      "fogged rear-view mirror with a dark back seat reflection",
-      "yellow street lamp over a looping village road",
-      "close-up of an old route sticker and phone map glow",
-      "shadow-filled passenger bench seen from the driver's POV"
-    ][index % 6];
-  }
-  if (/\bkos|kontrakan|kamar|lorong|pintu\b/i.test(text)) {
-    return [
-      "narrow Indonesian boarding house corridor",
-      "room key and chipped door number close-up",
-      "half-open shared kitchen door in weak neon light",
-      "phone flashlight sweeping across cracked floor tiles",
-      "window reflection at the end of a silent hallway",
-      "dark doorway with sandals placed too neatly outside"
-    ][index % 6];
-  }
-  if (/\bgunung|pendaki|tenda|hutan|jalur|peluit\b/i.test(text)) {
+  const sceneText = String(prompt || "").toLowerCase();
+  const themeText = `${input.theme || ""} ${input.episodeTitle || ""}`.toLowerCase();
+  const fallbackText = `${themeText} ${input.idea || ""}`.toLowerCase();
+  if (/\bgunung|pendaki|tenda|hutan|jalur|peluit|ranting|sepatu|pos\s*\d|sar\b/i.test(sceneText) || (/\bpendaki|gunung\b/i.test(themeText) && !/\bkos|kontrakan|kamar|lorong|pintu\b/i.test(sceneText))) {
     return [
       "misty mountain trail between wet trees",
       "small tent under dim flashlight glow",
@@ -507,7 +489,17 @@ function visualAnchor(input, prompt, index) {
       "tree line silhouette behind thick fog"
     ][index % 6];
   }
-  if (/\bpesan suara|nomor|hp|ibu|pemakaman|rumah keluarga\b/i.test(text)) {
+  if (/\bangkot|mobil|sopir|halte|spion|penumpang|jalan\b/i.test(sceneText) || (/\bjalan|angkot\b/i.test(themeText) && !/\bkos|kontrakan|kamar|lorong|pintu\b/i.test(sceneText))) {
+    return [
+      "empty angkot at a lonely roadside stop",
+      "wet money and a trembling hand near the dashboard",
+      "fogged rear-view mirror with a dark back seat reflection",
+      "yellow street lamp over a looping village road",
+      "close-up of an old route sticker and phone map glow",
+      "shadow-filled passenger bench seen from the driver's POV"
+    ][index % 6];
+  }
+  if (/\bpesan suara|nomor|hp|ibu|pemakaman|rumah keluarga|foto|melati\b/i.test(sceneText) || (/\bmimpi|keluarga\b/i.test(themeText) && !/\bkos|kontrakan|kamar|lorong|pintu\b/i.test(sceneText))) {
     return [
       "phone screen with incoming voice message glow",
       "family hallway after a funeral with dim lamp",
@@ -515,6 +507,26 @@ function visualAnchor(input, prompt, index) {
       "close-up of old drawer holding a dead phone",
       "melati flowers scattered near a threshold",
       "silent living room seen through a doorway"
+    ][index % 6];
+  }
+  if (/\bkos|kontrakan|kamar|lorong|pintu|kunci|dapur\b/i.test(sceneText) || /\bkos|kontrakan\b/i.test(themeText)) {
+    return [
+      "narrow Indonesian boarding house corridor",
+      "room key and chipped door number close-up",
+      "half-open shared kitchen door in weak neon light",
+      "phone flashlight sweeping across cracked floor tiles",
+      "window reflection at the end of a silent hallway",
+      "dark doorway with sandals placed too neatly outside"
+    ][index % 6];
+  }
+  if (/\bangkot|mobil|sopir|halte|spion|penumpang|jalan\b/i.test(fallbackText)) {
+    return [
+      "empty angkot at a lonely roadside stop",
+      "wet money and a trembling hand near the dashboard",
+      "fogged rear-view mirror with a dark back seat reflection",
+      "yellow street lamp over a looping village road",
+      "close-up of an old route sticker and phone map glow",
+      "shadow-filled passenger bench seen from the driver's POV"
     ][index % 6];
   }
   return motifByIndex(input.theme, index);
@@ -566,6 +578,19 @@ function visualFocusFromScene(value, input, index) {
   const text = cleanText(value || "", 900).toLowerCase();
   const motifs = [
     ["sumur", "sumur tua dan permukaan air gelap"],
+    ["tenda", "tenda kecil di jalur gunung berkabut"],
+    ["peluit", "peluit pendaki tergantung di tas basah"],
+    ["hutan", "hutan gunung berkabut dan senter redup"],
+    ["jalur", "jalur pendakian basah dalam kabut"],
+    ["sepatu", "sepatu pendaki berlumpur di depan tenda"],
+    ["ranting", "ranting patah di tanah basah"],
+    ["angkot", "kursi belakang angkot kosong dalam lampu jalan"],
+    ["spion", "kaca spion berembun dan kursi belakang gelap"],
+    ["halte", "halte sepi di jalan kampung malam"],
+    ["kunci", "kunci kamar dengan nomor asing"],
+    ["pesan suara", "layar HP dengan pesan suara masuk"],
+    ["foto", "foto keluarga jatuh di lantai"],
+    ["melati", "bunga melati di depan pintu terkunci"],
     ["jendela", "jendela retak dan pantulan samar"],
     ["kaca", "kaca retak dengan cahaya senter"],
     ["kursi", "kursi kosong yang bergeser sendiri"],
@@ -668,7 +693,13 @@ function normalizeOutlineStoryboards(storyboards, part, input) {
 }
 
 function defaultStoryboardBeat(part, beat, input) {
-  const focus = input.theme === "jalan" ? "jalan kosong dan kendaraan terakhir" : input.theme === "kos" ? "lorong dan kamar yang tidak beres" : "tempat utama yang makin dingin";
+  const focus = input.theme === "pendaki"
+    ? "jalur gunung, tenda, dan peluit yang makin dekat"
+    : input.theme === "jalan"
+      ? "jalan kosong dan kendaraan terakhir"
+      : input.theme === "kos"
+        ? "lorong dan kamar yang tidak beres"
+        : "tempat utama yang makin dingin";
   return `Episode ${part} beat ${beat}: ${focus} membuka petunjuk baru`;
 }
 

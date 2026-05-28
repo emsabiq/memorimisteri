@@ -214,7 +214,11 @@ function findActiveEpisode(stories) {
       complete,
       newest,
       idea: {
-        idea: base.input?.idea || base.plan?.season?.arcSummary || base.plan?.episode?.arcSummary || base.plan?.logline,
+        idea: [
+          base.plan?.season?.title || base.plan?.episode?.title,
+          base.plan?.season?.arcSummary || base.plan?.episode?.arcSummary || base.plan?.logline,
+          base.plan?.ending ? `Cliffhanger terakhir: ${base.plan.ending}` : ""
+        ].filter(Boolean).join(". ") || base.input?.idea,
         protagonistName: base.input?.protagonistName || "Aku",
         protagonistProfile: base.input?.protagonistProfile || "",
         theme: base.input?.theme || "rumah",
@@ -229,36 +233,25 @@ function findActiveEpisode(stories) {
 }
 
 function randomEpisodeSeed(stories) {
-  const themes = ["rumah", "kos", "jalan", "pendaki", "mimpi"];
   const names = ["Raka", "Naya", "Dimas", "Laras", "Ari", "Mira", "Bagas", "Sinta", "Reno", "Tari"];
-  const places = [
-    "rumah kontrakan belakang pasar yang lampunya menyala sendiri setiap jam dua malam",
-    "kos lama di ujung gang yang punya kamar tanpa nomor",
-    "jalan kampung dekat kebun tebu yang selalu membuat pengendara kembali ke titik awal",
-    "villa kosong dekat hutan pinus yang masih menyimpan pesan suara penyewa sebelumnya",
-    "warung tutup di pinggir sawah yang menerima pesanan dari nomor tidak dikenal",
-    "jalur pendakian berkabut tempat peluit terdengar dari arah jurang",
-    "rumah keluarga setelah pemakaman, ketika suara orang yang sudah tiada masih masuk lewat pesan suara"
-  ];
-  const fears = [
-    "suara ketukan kecil yang makin dekat",
-    "bayangan yang muncul duluan di pantulan kaca",
-    "pesan suara dari nomor yang sudah tidak aktif",
-    "jejak basah yang berhenti tepat di depan tempat tidur",
-    "pintu terkunci yang membuka dari sisi dalam",
-    "rekaman HP yang memutar suara narator sendiri"
+  const seeds = [
+    { theme: "rumah", place: "rumah kontrakan belakang pasar yang lampunya menyala sendiri setiap jam dua malam", fear: "suara ketukan kecil yang makin dekat" },
+    { theme: "kos", place: "kos lama di ujung gang yang punya kamar tanpa nomor", fear: "kunci asing yang selalu muncul lagi di saku" },
+    { theme: "jalan", place: "jalan kampung dekat kebun tebu yang selalu membuat pengendara kembali ke titik awal", fear: "spion yang menunjukkan penumpang di kursi belakang" },
+    { theme: "pendaki", place: "jalur pendakian berkabut tempat peluit terdengar dari arah jurang", fear: "jejak basah yang berhenti tepat di depan tenda" },
+    { theme: "mimpi", place: "rumah keluarga setelah pemakaman, ketika suara orang yang sudah tiada masih masuk lewat pesan suara", fear: "pesan suara dari nomor yang sudah tidak aktif" },
+    { theme: "rumah", place: "villa kosong dekat hutan pinus yang masih menyimpan pesan suara penyewa sebelumnya", fear: "rekaman HP yang memutar suara narator sendiri" },
+    { theme: "jalan", place: "warung tutup di pinggir sawah yang menerima pesanan dari nomor tidak dikenal", fear: "lampu jalan yang padam berurutan ke arah narator" }
   ];
   const styles = ["bisik tegang", "tenang menahan takut", "voice note tengah malam", "narator pelan sinematik", "cemas tapi jelas"];
   const index = stories.length + new Date().getDate();
   const protagonistName = names[index % names.length];
-  const theme = themes[index % themes.length];
-  const place = places[index % places.length];
-  const fear = fears[(index + 2) % fears.length];
+  const seed = seeds[index % seeds.length];
   return {
-    idea: `Buat Season 1 serial Memori Misteri original tentang ${protagonistName} yang mengalami gangguan di ${place}. Teror utama dimulai dari ${fear}, lalu setiap episode membuka petunjuk baru tanpa kehilangan rasa cerita nyata sampai episode 10 selesai.`,
+    idea: `Buat Season 1 serial Memori Misteri original tentang ${protagonistName} yang mengalami gangguan di ${seed.place}. Teror utama dimulai dari ${seed.fear}, lalu setiap episode membuka petunjuk baru tanpa kehilangan rasa cerita nyata sampai episode 10 selesai.`,
     protagonistName,
     protagonistProfile: `${protagonistName}, orang Indonesia dewasa, wajah lelah tapi penasaran, pakaian gelap sederhana, membawa HP dan senter kecil untuk kontinuitas visual`,
-    theme,
+    theme: seed.theme,
     tone: "seram pelan, rapi, terasa seperti cerita pengalaman nyata, twist bertahap, tidak gore",
     durationSec: 75 + ((index * 7) % 36),
     sceneCount: 8 + (index % 3),

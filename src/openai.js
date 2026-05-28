@@ -205,7 +205,7 @@ function storyCompletionUrls() {
 }
 
 function storyPayload({ promptText, model, strictJson }) {
-  return {
+  const payload = {
     model,
     ...(strictJson ? { response_format: { type: "json_object" } } : {}),
     messages: [
@@ -217,6 +217,8 @@ function storyPayload({ promptText, model, strictJson }) {
     ],
     temperature: 0.92
   };
+  if (/^gpt-5/i.test(model)) payload.max_completion_tokens = config.story.maxCompletionTokens;
+  return payload;
 }
 
 function parseJsonContent(content) {

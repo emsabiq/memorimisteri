@@ -945,11 +945,22 @@ button:not(:disabled):hover {
   border: 1px solid #352d29;
   border-radius: 8px;
   background: #11100f;
-  padding: 12px;
+  padding: 0;
   display: grid;
   align-content: start;
-  gap: 7px;
   min-width: 0;
+  overflow: hidden;
+}
+
+.studio-card-toggle {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  padding: 12px;
+  display: grid;
+  gap: 7px;
+  text-align: left;
 }
 
 .studio-card strong {
@@ -970,6 +981,24 @@ button:not(:disabled):hover {
 .studio-card em {
   font-style: normal;
   color: #f0c170;
+}
+
+.storyboard-list {
+  margin: 0;
+  padding: 0 12px 12px 30px;
+  color: #d8d0c8;
+  display: grid;
+  gap: 6px;
+}
+
+.storyboard-list li {
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.storyboard-hide {
+  margin: 0 12px 12px;
+  justify-self: start;
 }
 
 .studio-card.done {
