@@ -101,6 +101,7 @@ function ttsInstructions(story) {
     "Bacakan sepenuhnya dalam Bahasa Indonesia dengan pelafalan Indonesia natural.",
     `Gaya suara: ${style}.`,
     "Terdengar seperti orang Indonesia sedang menceritakan pengalaman mistis sungguhan di ruangan gelap.",
+    "Tempo santai dan menahan takut, jangan terlalu cepat.",
     "Baca sebagai satu cerita sambung, bukan potongan scene. Pakai napas natural, jeda tegang, jelas, tidak berlebihan, dan bukan gaya iklan."
   ].join(" ");
 }

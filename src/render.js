@@ -1,7 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { spawn } from "node:child_process";
-import { paths } from "./config.js";
+import { config, paths } from "./config.js";
 import { clamp, nowIso, safeFilename, splitLines } from "./util.js";
 
 const width = 1080;
@@ -51,7 +51,7 @@ export async function renderDraftVideo(story) {
   const sourceAudioDuration = story.assets?.audio?.path ? await probeMediaDuration(story.assets.audio.path) : 0;
   const contentDuration = renderContentDuration(story, sourceAudioDuration);
   const narrationTempo = sourceAudioDuration > contentDuration && contentDuration > 0
-    ? clamp(sourceAudioDuration / contentDuration, 1, 1.35)
+    ? clamp(sourceAudioDuration / contentDuration, 1, 1.12)
     : 1;
   const captionScenes = buildRenderScenes(story, contentDuration);
   const scenes = [buildIntroCoverScene(story, captionScenes[0]), ...captionScenes, ...buildEndingScenes(story, captionScenes.at(-1))];
@@ -157,9 +157,13 @@ function buildRenderScenes(story, targetDuration) {
 }
 
 function renderContentDuration(story, sourceAudioDuration) {
-  const requestedDuration = clamp(Number(story.input?.durationSec || 60), 45, 60);
+  const platformMaxDuration = Math.max(45, Number(config.instagram?.maxDurationSec || 90));
+  const requestedDuration = clamp(Number(story.input?.durationSec || 60), 45, platformMaxDuration);
+  const maxContentDuration = Math.max(8, platformMaxDuration - introFreezeDuration - jumpScareDuration - endCardDuration);
   const targetContentDuration = Math.max(8, requestedDuration - introFreezeDuration - jumpScareDuration - endCardDuration);
-  if (sourceAudioDuration > 0) return Number(Math.min(sourceAudioDuration, targetContentDuration).toFixed(2));
+  if (sourceAudioDuration > 0) {
+    return Number(Math.min(Math.max(sourceAudioDuration, targetContentDuration), maxContentDuration).toFixed(2));
+  }
   return targetContentDuration;
 }
 

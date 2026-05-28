@@ -231,6 +231,8 @@ function normalizeInput(input) {
     partNumber,
     imageSize: cleanText(input.imageSize || config.openai.imageSize, 20),
     imageQuality: cleanText(input.imageQuality || config.openai.imageQuality, 20),
+    ttsProvider: cleanText(input.ttsProvider || "", 40),
+    ttsStyle: cleanText(input.ttsStyle || "", 140),
     language: "id"
   };
 }
@@ -252,6 +254,7 @@ function normalizeMemory(context) {
 }
 
 function buildPrompt(input, memory) {
+  const words = narrationWordTarget(input.durationSec);
   const matchingEpisode = memory.recent.find((story) => normalizeKey(story.episodeTitle) === normalizeKey(input.episodeTitle));
   const existingOutline = Array.isArray(matchingEpisode?.outline)
     ? [
@@ -276,7 +279,7 @@ function buildPrompt(input, memory) {
     "{ title, logline, hook, ending, episode:{ title, totalParts, currentPart, partTitle, arcSummary, partOutline:[{ part, title, summary, cliffhanger }] }, scenes:[{ index, durationSec, narration, screenText, imagePrompt, transition, effect, soundDesign }] }",
     "Episode besar harus punya outline sesuai Total part, minimal 7 part dan maksimal 13 part. Script scenes hanya untuk Current part.",
     "Durasi video current part harus 1 sampai 2 menit, dan jangan melewati durasi yang diminta.",
-    "Total narasi current part sekitar 130-220 kata agar TTS terdengar lega, tidak terburu-buru.",
+    `Total narasi current part sekitar ${words.min}-${words.max} kata agar TTS terdengar santai, punya jeda, dan tidak dipaksa dipercepat.`,
     "Hook harus langsung memancing rasa penasaran, tetapi narration scene 1 tetap mulai dari kejadian, bukan promosi.",
     "Setiap narration harus terasa seperti ucapan yang bisa direkam langsung: ada rasa spontan, tapi tetap jelas dan tidak bertele-tele.",
     "Bayangkan semua narration akan digabung menjadi satu audio TTS. Karena itu alurnya harus nyambung, tanpa lompatan bahasa yang terasa ditempel.",
@@ -304,6 +307,14 @@ function buildPrompt(input, memory) {
     "Setiap imagePrompt harus detail dan konsisten dengan visual style ini:",
     visualPromptSuffix
   ].join("\n");
+}
+
+function narrationWordTarget(durationSec) {
+  const seconds = clamp(Number(durationSec || 60), 45, 115);
+  return {
+    min: Math.max(70, Math.round(seconds * 1.45)),
+    max: Math.max(95, Math.round(seconds * 2.0))
+  };
 }
 
 function normalizePlan(plan, input, memory) {

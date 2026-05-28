@@ -21,7 +21,7 @@ export async function uploadNextPart() {
   await importRemoteStories();
   const stories = await listStories();
   const forceNewPart = truthyEnv("MISTIS_FORCE_NEW_PART");
-  const dueRetry = stories.find((story) => story.status === "rendered" && story.publish?.state === "failed" && isDue(story.publish.nextAttemptAt));
+  const dueRetry = stories.find((story) => story.status === "rendered" && story.publish?.state === "failed" && isDue(story.publish.nextAttemptAt) && isPublishReady(story));
   if (!forceNewPart && !dueRetry && uploadedToday(stories)) {
     return { ok: false, skipped: true, reason: "Part hari ini sudah uploaded. Retry gagal tetap akan diproses saat due." };
   }
@@ -131,7 +131,7 @@ async function generateNextSequentialPart(stories) {
     imageQuality: process.env.IMAGE_QUALITY || "low",
     imageSize: process.env.IMAGE_SIZE || "1024x1536",
     ttsProvider: process.env.MISTIS_TTS_PROVIDER || "elevenlabs",
-    ttsStyle: generatedIdea.ttsStyle
+    ttsStyle: process.env.MISTIS_TTS_STYLE || generatedIdea.ttsStyle
   };
   return generateFullStory(input, { ttsProvider: input.ttsProvider });
 }
@@ -154,14 +154,14 @@ async function generateForcedPart(stories) {
     imageQuality: process.env.IMAGE_QUALITY || "low",
     imageSize: process.env.IMAGE_SIZE || "1024x1536",
     ttsProvider: process.env.MISTIS_TTS_PROVIDER || "elevenlabs",
-    ttsStyle: generatedIdea.ttsStyle
+    ttsStyle: process.env.MISTIS_TTS_STYLE || generatedIdea.ttsStyle
   };
   return generateFullStory(input, { ttsProvider: input.ttsProvider });
 }
 
 function findActiveEpisode(stories) {
   const groups = new Map();
-  for (const story of stories) {
+  for (const story of stories.filter((item) => item.publish?.state === "uploaded" && isPublishReady(item))) {
     const title = episodeKey(story);
     if (!title) continue;
     if (!groups.has(title)) groups.set(title, []);
@@ -244,7 +244,7 @@ function clampPartTotal(value) {
 }
 
 function nextSequentialStory(stories) {
-  const rendered = stories.filter((story) => story.status === "rendered" && story.assets?.video?.path && story.publish?.state !== "uploaded");
+  const rendered = stories.filter((story) => story.status === "rendered" && story.assets?.video?.path && story.publish?.state !== "uploaded" && isPublishReady(story));
   const groups = new Map();
   for (const story of stories) {
     const title = episodeKey(story);
@@ -261,7 +261,7 @@ function previousPartsUploaded(group, story) {
   const part = Number(story.plan?.episode?.currentPart || story.input?.partNumber || 1);
   if (part <= 1) return true;
   const uploaded = new Set(group
-    .filter((item) => item.publish?.state === "uploaded")
+    .filter((item) => item.publish?.state === "uploaded" && isPublishReady(item))
     .map((item) => Number(item.plan?.episode?.currentPart || item.input?.partNumber || 0)));
   for (let index = 1; index < part; index += 1) {
     if (!uploaded.has(index)) return false;
@@ -289,7 +289,19 @@ function isDue(value) {
 
 function uploadedToday(stories) {
   const today = localDateKey(new Date());
-  return stories.some((story) => story.publish?.state === "uploaded" && localDateKey(new Date(story.publish.uploadedAt || 0)) === today);
+  return stories.some((story) => story.publish?.state === "uploaded" && isPublishReady(story) && localDateKey(new Date(story.publish.uploadedAt || 0)) === today);
+}
+
+function isPublishReady(story) {
+  const sceneCount = Number(story.plan?.scenes?.length || story.input?.sceneCount || 0);
+  const images = Array.isArray(story.assets?.images) ? story.assets.images : [];
+  const finalImages = sceneCount > 0
+    && images.length >= sceneCount
+    && images.slice(0, sceneCount).every((image) => (image?.path || image?.url) && image.source !== "local-fallback");
+  const hasAudio = Boolean(story.assets?.audio?.path || story.assets?.audio?.url);
+  const hasVideo = Boolean(story.assets?.video?.path || story.assets?.video?.url);
+  const duration = Number(story.assets?.video?.durationSec || 0);
+  return Boolean(finalImages && hasAudio && hasVideo && (!duration || duration >= 45));
 }
 
 function truthyEnv(name) {
