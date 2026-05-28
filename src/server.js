@@ -11,15 +11,12 @@ import { ensureStoryAudio, ensureStoryImages, renderAndPersist } from "./pipelin
 import { getStory, listStories, listSubmissions, saveStory, saveSubmission } from "./storage.js";
 import { uploadNextPart } from "./run-once.js";
 import { approveSubmissionToStory, createSubmissionFromUpload, normalizeRemoteSubmission, storeUploadedFile, transcribeSubmission, validateSubmissionFile } from "./submissions.js";
+import { remoteEnabled, uploadSubmissionAssets } from "./remote.js";
 import { nowIso } from "./util.js";
 
 ensureProjectDirs();
 
 const app = express();
-app.use(express.json({ limit: "2mb" }));
-app.use(express.static(paths.publicDir));
-app.use("/generated", express.static(paths.generatedDir));
-
 const upload = multer({
   dest: path.join(os.tmpdir(), "mistis-submissions"),
   limits: { fileSize: config.submissions.maxUploadMb * 1024 * 1024 },
@@ -32,6 +29,30 @@ const upload = multer({
     }
   }
 });
+
+app.use(express.json({ limit: "2mb" }));
+app.get("/fan.php", (_req, res) => {
+  res.type("html").send(renderFanPage());
+});
+app.post("/fan.php", upload.single("storyFile"), async (req, res) => {
+  try {
+    if ((req.body?.consent || "") !== "yes") throw httpError("Centang persetujuan dulu supaya cerita bisa direview.", 400);
+    if (!req.file) throw httpError("File cerita wajib diunggah.", 400);
+    const file = await storeUploadedFile(req.file);
+    const submission = await createSubmissionFromUpload({ file, body: req.body || {} });
+    if (submission.file?.path) {
+      submission.file.url = `/submissions/${path.basename(submission.file.path)}`;
+      await saveSubmission(submission);
+    }
+    if (remoteEnabled()) await uploadSubmissionAssets(submission);
+    res.type("html").send(renderFanPage({ message: "Cerita sudah masuk antrian review. Terima kasih.", posted: true }));
+  } catch (error) {
+    if (req.file?.path) await fs.rm(req.file.path, { force: true }).catch(() => {});
+    res.status(error.status || 400).type("html").send(renderFanPage({ error: error.message || "Upload gagal." }));
+  }
+});
+app.use(express.static(paths.publicDir));
+app.use("/generated", express.static(paths.generatedDir));
 
 app.get("/api/health", (_req, res) => {
   const ffmpeg = spawnSync("ffmpeg", ["-version"], { encoding: "utf8", windowsHide: true });
@@ -214,6 +235,81 @@ function startUploadLoop() {
   };
   setTimeout(tick, 10_000);
   setInterval(tick, intervalMs);
+}
+
+function httpError(message, status = 500) {
+  const error = new Error(message);
+  error.status = status;
+  return error;
+}
+
+function escapeHtml(value) {
+  return String(value || "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+function renderFanPage({ message = "", error = "", posted = false } = {}) {
+  const alert = message
+    ? `<div class="panel fan-alert success">${escapeHtml(message)}</div>`
+    : error
+      ? `<div class="panel fan-alert error">${escapeHtml(error)}</div>`
+      : "";
+  const form = posted ? "" : `
+        <section class="fan-grid">
+          <form id="fanForm" class="panel fan-form fan-form-featured" method="post" action="/fan.php" enctype="multipart/form-data">
+            <div class="fan-form-head">
+              <strong>Form kiriman</strong>
+              <span>Audio minimal 20 detik, teks minimal 250 karakter.</span>
+            </div>
+            <div class="field-grid">
+              <label><span>Nama panggilan</span><input name="fanName" maxlength="80" placeholder="Boleh anonim"></label>
+              <label><span>Kontak opsional</span><input name="contact" maxlength="120" placeholder="@instagram / email"></label>
+            </div>
+            <label><span>Judul cerita</span><input name="title" maxlength="120" placeholder="Contoh: Suara dari kamar kosong" required></label>
+            <label><span>File rekaman / teks</span><input name="storyFile" type="file" accept=".mp3,.wav,.m4a,.aac,.ogg,.opus,.webm,.mp4,.txt,.md,.docx" required></label>
+            <label><span>Teks tambahan</span><textarea name="storyText" rows="8" placeholder="Tulis kronologi singkat, nama samaran, lokasi umum, dan bagian paling seram."></textarea></label>
+            <label><span>Catatan privasi</span><textarea name="note" rows="3" placeholder="Bagian yang harus disamarkan, nama yang tidak boleh disebut, atau izin kredit nama."></textarea></label>
+            <label class="consent-row"><input name="consent" type="checkbox" value="yes" required><span>Saya setuju cerita ini direview dan boleh diadaptasi menjadi konten Memori Misteri dengan penyamaran seperlunya.</span></label>
+            <button class="primary fan-submit" type="submit">Kirim ke antrian</button>
+          </form>
+          <aside class="fan-side panel">
+            <h2>Yang bisa dikirim</h2>
+            <div class="fan-info-list">
+              <div><strong>Rekaman</strong><span>MP3, WAV, M4A, AAC, OGG, OPUS, WEBM, atau MP4.</span></div>
+              <div><strong>Teks</strong><span>TXT, MD, atau DOCX. Cerita pendek boleh, asal detailnya cukup.</span></div>
+              <div><strong>Review dulu</strong><span>Semua kiriman masuk dashboard dan tidak langsung dipublikasikan.</span></div>
+            </div>
+          </aside>
+        </section>`;
+  return `<!doctype html>
+<html lang="id">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Kirim Cerita - Memori Misteri</title>
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body class="fan-page">
+    <main class="fan-shell">
+      <section class="fan-hero fan-hero-immersive">
+        <div class="fan-hero-copy">
+          <p class="eyebrow">Memori Misteri</p>
+          <h1>Kirim cerita serammu</h1>
+          <p>Rekaman atau teks masuk ke antrian dashboard dulu. Setelah disetujui, ceritamu bisa diolah menjadi episode serial Memori Misteri.</p>
+        </div>
+        <div class="fan-steps" aria-label="Alur kiriman">
+          <span>1. Kirim</span><span>2. Review</span><span>3. Transcribe</span><span>4. Jadi episode</span>
+        </div>
+      </section>
+      ${alert}
+      ${form}
+    </main>
+  </body>
+</html>`;
 }
 
 async function listSubmissionsWithRemote() {

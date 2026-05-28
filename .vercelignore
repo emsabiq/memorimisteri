@@ -5,3 +5,4 @@ data
 .git
 .env
 *.env
+public/fan.php

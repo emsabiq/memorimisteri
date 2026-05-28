@@ -65,6 +65,20 @@ export async function uploadPublicSite() {
   });
 }
 
+export async function uploadSubmissionAssets(submission) {
+  const cfg = assertRemoteConfig();
+  await withRemoteClient(cfg, async (client) => {
+    const filePath = submission.file?.path;
+    const url = submission.file?.url || "";
+    if (filePath && url) {
+      const remotePath = String(url).replace(/^\/+/, "");
+      await client.ensureDir(path.posix.dirname(remotePath));
+      await client.upload(filePath, remotePath);
+    }
+    await uploadJsonFile(client, path.join(paths.dataDir, "submissions.json"), "state/submissions.json");
+  });
+}
+
 function assertRemoteConfig() {
   const missing = [];
   if (!config.ftp.host) missing.push("FTP_HOST/SFTP_HOST");

@@ -8,6 +8,7 @@ dotenv.config();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const rootDir = path.resolve(__dirname, "..");
+const runtimeDir = process.env.VERCEL ? path.join("/tmp", "mistis-video") : rootDir;
 
 function clean(value) {
   return String(value || "").trim();
@@ -32,19 +33,20 @@ function numberEnv(name, fallback) {
 
 export const paths = {
   rootDir,
-  dataDir: path.join(rootDir, "data"),
-  generatedDir: path.join(rootDir, "generated"),
-  imageDir: path.join(rootDir, "generated", "images"),
-  audioDir: path.join(rootDir, "generated", "audio"),
-  videoDir: path.join(rootDir, "generated", "videos"),
-  storyboardDir: path.join(rootDir, "generated", "storyboards"),
-  uploadDir: path.join(rootDir, "generated", "submissions"),
+  dataDir: path.join(runtimeDir, "data"),
+  generatedDir: path.join(runtimeDir, "generated"),
+  imageDir: path.join(runtimeDir, "generated", "images"),
+  audioDir: path.join(runtimeDir, "generated", "audio"),
+  videoDir: path.join(runtimeDir, "generated", "videos"),
+  storyboardDir: path.join(runtimeDir, "generated", "storyboards"),
+  uploadDir: path.join(runtimeDir, "generated", "submissions"),
   publicDir: path.join(rootDir, "public")
 };
 
 export function ensureProjectDirs() {
-  for (const dir of Object.values(paths)) {
-    if (String(dir).includes(rootDir)) fs.mkdirSync(dir, { recursive: true });
+  for (const [key, dir] of Object.entries(paths)) {
+    if (key === "rootDir" || key === "publicDir") continue;
+    fs.mkdirSync(dir, { recursive: true });
   }
 }
 
