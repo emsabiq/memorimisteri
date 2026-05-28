@@ -298,40 +298,161 @@ button:not(:disabled):hover {
 
 .fan-page {
   background:
-    linear-gradient(180deg, rgba(0, 0, 0, 0.08), rgba(0, 0, 0, 0.78)),
-    linear-gradient(145deg, #070807, #17110f 48%, #0d1715);
+    linear-gradient(180deg, rgba(0, 0, 0, 0.02), rgba(0, 0, 0, 0.82)),
+    linear-gradient(145deg, #070807, #19120f 42%, #101b17 74%, #080807);
 }
 
 .fan-shell {
-  width: min(860px, calc(100vw - 32px));
+  width: min(1080px, calc(100vw - 32px));
   margin: 0 auto;
-  padding: 42px 0;
+  padding: 34px 0 56px;
   display: grid;
   gap: 18px;
 }
 
 .fan-hero {
-  min-height: 180px;
+  min-height: 260px;
   display: grid;
   align-content: end;
   gap: 10px;
 }
 
+.fan-hero-immersive {
+  position: relative;
+  overflow: hidden;
+  border-bottom: 1px solid rgba(226, 196, 131, 0.28);
+  padding: 40px 0 24px;
+}
+
+.fan-hero-immersive::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(90deg, rgba(7, 8, 7, 0.92), rgba(7, 8, 7, 0.35)),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='900' height='520' viewBox='0 0 900 520'%3E%3Crect width='900' height='520' fill='%230b0c0b'/%3E%3Cpath d='M0 380 C160 320 260 405 410 335 C570 260 660 330 900 240 L900 520 L0 520 Z' fill='%23182018'/%3E%3Cpath d='M520 120 L820 170 L800 430 L500 430 Z' fill='%2314100e'/%3E%3Cpath d='M565 170 L660 185 L650 300 L558 292 Z' fill='%23202220'/%3E%3Ccircle cx='735' cy='108' r='54' fill='%23b68b45' opacity='.54'/%3E%3Cpath d='M120 455 C180 365 250 365 305 455' stroke='%23674a31' stroke-width='18' fill='none'/%3E%3Ccircle cx='213' cy='452' r='82' fill='%23070807'/%3E%3C/svg%3E");
+  background-size: cover;
+  background-position: center right;
+  opacity: 0.95;
+}
+
+.fan-hero-copy,
+.fan-steps {
+  position: relative;
+  z-index: 1;
+}
+
+.fan-hero-copy {
+  max-width: 720px;
+}
+
 .fan-hero h1 {
   font-size: 64px;
   line-height: 0.98;
+  max-width: 720px;
 }
 
 .fan-hero p:not(.eyebrow) {
   color: #d8d0c8;
-  max-width: 560px;
+  max-width: 620px;
   line-height: 1.5;
+}
+
+.fan-steps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 24px;
+}
+
+.fan-steps span {
+  border: 1px solid rgba(226, 196, 131, 0.34);
+  background: rgba(14, 14, 13, 0.82);
+  border-radius: 7px;
+  color: #f0d69a;
+  font-size: 12px;
+  padding: 8px 10px;
+}
+
+.fan-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 16px;
+  align-items: start;
 }
 
 .fan-form {
   padding: 18px;
   display: grid;
   gap: 14px;
+}
+
+.fan-form-featured {
+  border-color: rgba(226, 196, 131, 0.28);
+}
+
+.fan-form-head {
+  display: grid;
+  gap: 4px;
+}
+
+.fan-form-head strong {
+  font-size: 20px;
+}
+
+.fan-form-head span {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.consent-row {
+  grid-template-columns: 18px minmax(0, 1fr);
+  align-items: start;
+  gap: 10px;
+}
+
+.consent-row input {
+  width: 18px;
+  margin-top: 3px;
+}
+
+.consent-row span {
+  color: #d8d0c8;
+  line-height: 1.45;
+}
+
+.fan-submit {
+  min-height: 48px;
+}
+
+.fan-side {
+  padding: 18px;
+  display: grid;
+  gap: 16px;
+}
+
+.fan-side h2 {
+  font-size: 18px;
+}
+
+.fan-info-list {
+  display: grid;
+  gap: 10px;
+}
+
+.fan-info-list div {
+  border: 1px solid #332c28;
+  border-radius: 7px;
+  background: #0e0e0d;
+  padding: 12px;
+  display: grid;
+  gap: 5px;
+}
+
+.fan-info-list span {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
 }
 
 .fan-alert {
@@ -703,6 +824,10 @@ button:not(:disabled):hover {
   }
 
   .preview-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .fan-grid {
     grid-template-columns: 1fr;
   }
 

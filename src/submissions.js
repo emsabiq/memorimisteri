@@ -67,6 +67,15 @@ export async function transcribeSubmission(id) {
   await ensureLocalSubmissionFile(submission);
   if (submission.text && submission.status !== "waiting_transcribe") return submission;
   if (!isMediaExtension(submission.file?.ext)) {
+    const ext = String(submission.file?.ext || "").toLowerCase();
+    const extracted = await extractText(submission.file.path, ext);
+    const text = cleanText([submission.text, extracted].filter(Boolean).join("\n\n"), 20000);
+    if (text.length < config.submissions.minTextChars) {
+      const error = new Error(`Teks cerita terlalu pendek. Minimal ${config.submissions.minTextChars} karakter.`);
+      error.status = 409;
+      throw error;
+    }
+    submission.text = text;
     submission.status = "ready_for_review";
     submission.updatedAt = nowIso();
     await saveSubmission(submission);
