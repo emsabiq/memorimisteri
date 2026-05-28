@@ -115,6 +115,64 @@ export async function transcribeAudioFile(audioPath) {
   return String(data.text || "").replace(/\s+/g, " ").trim();
 }
 
+export async function transcribeAudioCaptions(audioPath) {
+  assertOpenAi();
+  let data;
+  try {
+    data = await requestVerboseTranscription(audioPath, true);
+  } catch {
+    data = await requestVerboseTranscription(audioPath, false);
+  }
+  return {
+    provider: "openai",
+    model: config.openai.transcribeModel,
+    sourceAudioPath: audioPath,
+    text: String(data.text || "").replace(/\s+/g, " ").trim(),
+    durationSec: Number(data.duration || 0),
+    words: normalizeTranscriptWords(data.words),
+    segments: normalizeTranscriptSegments(data.segments)
+  };
+}
+
+async function requestVerboseTranscription(audioPath, withWords) {
+  const buffer = await fs.readFile(audioPath);
+  const form = new FormData();
+  form.append("file", new Blob([buffer]), path.basename(audioPath));
+  form.append("model", config.openai.transcribeModel);
+  form.append("language", "id");
+  form.append("response_format", "verbose_json");
+  if (withWords) form.append("timestamp_granularities[]", "word");
+
+  const response = await fetch(`${config.openai.baseUrl}/audio/transcriptions`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${config.openai.apiKey}` },
+    body: form
+  });
+  return parseOpenAiResponse(response);
+}
+
+function normalizeTranscriptWords(words) {
+  if (!Array.isArray(words)) return [];
+  return words
+    .map((item) => ({
+      word: String(item.word || "").trim(),
+      start: Number(item.start),
+      end: Number(item.end)
+    }))
+    .filter((item) => item.word && Number.isFinite(item.start) && Number.isFinite(item.end) && item.end > item.start);
+}
+
+function normalizeTranscriptSegments(segments) {
+  if (!Array.isArray(segments)) return [];
+  return segments
+    .map((item) => ({
+      text: String(item.text || "").replace(/\s+/g, " ").trim(),
+      start: Number(item.start),
+      end: Number(item.end)
+    }))
+    .filter((item) => item.text && Number.isFinite(item.start) && Number.isFinite(item.end) && item.end > item.start);
+}
+
 function assertOpenAi() {
   if (!config.openai.apiKey) throw new Error("OPENAI_API_KEY belum diisi.");
 }

@@ -252,7 +252,14 @@ function normalizeMemory(context) {
     partTitle: cleanText(story?.plan?.episode?.partTitle || "", 100),
     partNumber: Number(story?.plan?.episode?.currentPart || story?.input?.partNumber || 0),
     outline: story?.plan?.episode?.partOutline,
-    logline: cleanText(story?.plan?.logline || story?.input?.idea || "", 180)
+    logline: cleanText(story?.plan?.logline || story?.input?.idea || "", 180),
+    hook: cleanText(story?.plan?.hook || "", 180),
+    ending: cleanText(story?.plan?.ending || "", 220),
+    narration: cleanText((story?.plan?.scenes || []).map((scene) => scene.narration).join(" "), 900),
+    protagonistName: cleanText(story?.input?.protagonistName || "", 60),
+    protagonistProfile: cleanText(story?.input?.protagonistProfile || "", 260),
+    theme: cleanText(story?.input?.theme || "", 40),
+    tone: cleanText(story?.input?.tone || "", 160)
   })).filter((story) => story.title || story.logline);
   return {
     recent,
@@ -262,13 +269,38 @@ function normalizeMemory(context) {
 
 function buildPrompt(input, memory) {
   const words = narrationWordTarget(input.durationSec);
-  const matchingEpisode = memory.recent.find((story) => normalizeKey(story.episodeTitle) === normalizeKey(input.episodeTitle));
+  const episodeMatches = memory.recent
+    .filter((story) => normalizeKey(story.episodeTitle) === normalizeKey(input.episodeTitle))
+    .sort((a, b) => Number(a.partNumber || 0) - Number(b.partNumber || 0));
+  const previousParts = episodeMatches.filter((story) => Number(story.partNumber || 0) > 0 && Number(story.partNumber || 0) < input.partNumber);
+  const matchingEpisode = episodeMatches.at(-1);
+  const latestPrevious = previousParts.at(-1);
   const existingOutline = Array.isArray(matchingEpisode?.outline)
     ? [
         "Outline episode yang sudah ada, pakai ini sebagai kontinuitas:",
         ...matchingEpisode.outline.map((part) => `Part ${part.part}: ${part.title} - ${part.summary || part.cliffhanger || ""}`)
       ].join("\n")
     : "";
+  const continuity = previousParts.length
+    ? [
+        "KONTINUITAS EPISODE WAJIB, JANGAN DILANGGAR:",
+        `Ini adalah part ${input.partNumber} dari episode yang sama. Jangan membuat kasus baru, saksi baru, lokasi utama baru, atau narator baru.`,
+        `Narator/protagonis tetap: ${latestPrevious?.protagonistName || input.protagonistName}.`,
+        latestPrevious?.protagonistProfile ? `Kontinuitas visual protagonis tetap: ${latestPrevious.protagonistProfile}.` : "",
+        "Part saat ini harus mulai setelah cliffhanger/fakta terakhir part sebelumnya, bukan mengulang dari awal.",
+        "Pertahankan relasi sebab-akibat, objek teror utama, tempat utama, dan misteri yang sudah muncul.",
+        ...previousParts.map((story) => [
+          `Part ${story.partNumber} yang sudah tayang: ${story.title}`,
+          `Logline: ${story.logline}`,
+          `Ending/cliffhanger: ${story.ending}`,
+          `Ringkasan narasi: ${story.narration}`
+        ].filter(Boolean).join("\n"))
+      ].filter(Boolean).join("\n")
+    : [
+        "KONTINUITAS EPISODE WAJIB:",
+        "Karena ini part 1, buat fondasi episode yang stabil untuk semua part berikutnya: narator/protagonis, lokasi utama, objek teror, aturan gangguan, dan cliffhanger yang bisa dilanjutkan.",
+        "Jangan membuat part 1 terasa seperti cerita selesai. Simpan misteri utama agar part 2 sampai tamat tetap bisa menyambung dari kejadian yang sama."
+      ].join("\n");
   const avoid = memory.recent.length
     ? [
         "Jangan ulangi judul, lokasi utama, twist, atau pola cerita berikut:",
@@ -310,6 +342,7 @@ function buildPrompt(input, memory) {
     `Current part: ${input.partNumber}`,
     `Total part episode: ${input.totalParts}`,
     matchingEpisode ? `Episode ini sudah punya part sebelumnya. Pertahankan kontinuitas dunia, tokoh, dan misteri, tapi tulis hanya part ${input.partNumber}.` : "",
+    continuity,
     existingOutline,
     avoid,
     "Setiap imagePrompt harus detail dan konsisten dengan visual style ini:",

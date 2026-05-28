@@ -96,6 +96,7 @@ export async function renderDraftVideo(story) {
     contentDuration,
     totalDuration,
     introDuration: introFreezeDuration,
+    narrationTempo,
     endCardStart: introFreezeDuration + contentDuration + jumpScareDuration
   });
   const filename = `${story.id}-${safeFilename(story.title)}.mp4`;
@@ -145,7 +146,8 @@ export async function renderDraftVideo(story) {
       subtitleOffsetSec: Number(subtitleOffsetSeconds.toFixed(2)),
       narrationSourceDurationSec: Number(sourceAudioDuration.toFixed(2)),
       narrationTempo: Number(narrationTempo.toFixed(4)),
-      captionContentDurationSec: Number(contentDuration.toFixed(2))
+      captionContentDurationSec: Number(contentDuration.toFixed(2)),
+      captionTiming: story.assets?.captions?.words?.length ? "tts-word-transcript" : story.assets?.captions?.segments?.length ? "tts-segment-transcript" : "scene-estimate"
     },
     fallbackImages
   };
@@ -511,16 +513,23 @@ async function combineSegmentsWithOverlayFade({ segmentPaths, scenes, transition
   }
 }
 
-async function writeSubtitleAss({ outputPath, story, scenes, contentDuration, totalDuration, introDuration, endCardStart }) {
-  const events = [];
+async function writeSubtitleAss({ outputPath, story, scenes, contentDuration, totalDuration, introDuration, narrationTempo = 1, endCardStart }) {
   const subtitleBase = Math.max(0, Number(introDuration || 0));
-  let cursor = subtitleBase;
-  for (const scene of scenes) {
-    const duration = effectiveSceneDuration(scene);
-    const start = Math.max(subtitleBase, cursor + subtitleOffsetSeconds);
-    const end = cursor + duration + subtitleOffsetSeconds;
-    events.push(...captionEventsForCue(scene.narration, start, end));
-    cursor += duration;
+  const events = captionEventsFromTtsTranscript(story.assets?.captions, {
+    narrationDelay: subtitleBase,
+    narrationTempo,
+    endAt: endCardStart
+  });
+
+  if (!events.length) {
+    let cursor = subtitleBase;
+    for (const scene of scenes) {
+      const duration = effectiveSceneDuration(scene);
+      const start = Math.max(subtitleBase, cursor + subtitleOffsetSeconds);
+      const end = cursor + duration + subtitleOffsetSeconds;
+      events.push(...captionEventsForCue(scene.narration, start, end));
+      cursor += duration;
+    }
   }
 
   events.push({
@@ -578,32 +587,75 @@ function captionEventsForCue(text, cueStart, cueEnd) {
       ? end - chunkStart
       : (duration * (chunkWeights[chunkIndex] || 1)) / totalChunkWeight;
     const chunkEnd = chunkIndex === chunks.length - 1 ? end : Math.min(end, chunkStart + chunkDuration);
-    const words = wordsFromLines(lines);
-    if (!words.length || chunkEnd <= chunkStart) continue;
-
-    const wordWeights = words.map(wordSpeechWeight);
-    const totalWordWeight = wordWeights.reduce((sum, weight) => sum + weight, 0) || words.length;
-    let wordCursor = chunkStart;
-    for (let wordIndex = 0; wordIndex < words.length; wordIndex += 1) {
-      const wordStart = wordCursor;
-      const wordDuration = wordIndex === words.length - 1
-        ? chunkEnd - wordStart
-        : ((chunkEnd - chunkStart) * wordWeights[wordIndex]) / totalWordWeight;
-      const wordEnd = wordIndex === words.length - 1 ? chunkEnd : Math.min(chunkEnd, wordStart + wordDuration);
-      if (wordEnd <= wordStart + 0.05) continue;
+    if (wordsFromLines(lines).length && chunkEnd > chunkStart + 0.12) {
       events.push({
         layer: 1,
-        start: wordStart,
-        end: wordEnd,
+        start: chunkStart,
+        end: chunkEnd,
         style: "Caption",
-        text: formatHighlightedAssCaption(lines, wordIndex)
+        text: formatPlainAssCaption(lines)
       });
-      wordCursor = wordEnd;
     }
     chunkCursor = chunkEnd;
   }
 
   return events;
+}
+
+function captionEventsFromTtsTranscript(captions, { narrationDelay = 0, narrationTempo = 1, endAt = 0 } = {}) {
+  const tempo = Math.max(0.1, Number(narrationTempo || 1));
+  const mapTime = (seconds) => Number(narrationDelay || 0) + (Number(seconds || 0) / tempo) + subtitleOffsetSeconds;
+  const maxEnd = Number(endAt || 0) > 0 ? Number(endAt) - 0.04 : Number.POSITIVE_INFINITY;
+  const words = Array.isArray(captions?.words) ? captions.words : [];
+  if (words.length) return captionEventsFromTranscriptWords(words, mapTime, maxEnd);
+
+  const segments = Array.isArray(captions?.segments) ? captions.segments : [];
+  return segments.flatMap((segment) => {
+    const start = Math.max(0, mapTime(segment.start));
+    const end = Math.min(maxEnd, Math.max(start + 0.25, mapTime(segment.end)));
+    return captionEventsForCue(segment.text, start, end);
+  });
+}
+
+function captionEventsFromTranscriptWords(words, mapTime, maxEnd) {
+  const events = [];
+  let bucket = [];
+  const flush = () => {
+    if (!bucket.length) return;
+    const text = bucket.map((item) => item.word).join(" ").replace(/\s+/g, " ").trim();
+    const lines = firstCaptionChunk(text);
+    const start = Math.max(0, mapTime(bucket[0].start));
+    const end = Math.min(maxEnd, Math.max(start + 0.35, mapTime(bucket.at(-1).end)));
+    if (lines.length && end > start + 0.12) {
+      events.push({ layer: 1, start, end, style: "Caption", text: formatPlainAssCaption(lines) });
+    }
+    bucket = [];
+  };
+
+  for (const item of words) {
+    const word = {
+      word: String(item.word || "").trim(),
+      start: Number(item.start),
+      end: Number(item.end)
+    };
+    if (!word.word || !Number.isFinite(word.start) || !Number.isFinite(word.end) || word.end <= word.start) continue;
+    const previous = bucket.at(-1);
+    const candidateText = [...bucket.map((entry) => entry.word), word.word].join(" ");
+    if (
+      bucket.length
+      && (word.start - previous.end > 0.55 || bucket.length >= 9 || wrapCaptionChunks(candidateText).length > 1)
+    ) {
+      flush();
+    }
+    bucket.push(word);
+  }
+  flush();
+
+  return events;
+}
+
+function firstCaptionChunk(text) {
+  return wrapCaptionChunks(text)[0] || [];
 }
 
 function wrapCaptionChunks(text) {
@@ -687,18 +739,10 @@ function wordsFromLines(lines) {
   return splitCaptionWords((lines || []).join(" "));
 }
 
-function formatHighlightedAssCaption(lines, activeWordIndex) {
-  let index = 0;
-  const formatted = lines.map((line) => {
-    const words = String(line || "").split(/\s+/).filter(Boolean);
-    return words.map((word) => {
-      const escaped = assEscape(word);
-      const active = index === activeWordIndex;
-      index += 1;
-      if (!active) return escaped;
-      return `{\\1c&H00FFFF&\\bord6}${escaped}{\\1c&HFFFFFF&\\bord5}`;
-    }).join(" ");
-  });
+function formatPlainAssCaption(lines) {
+  const formatted = (lines || [])
+    .map((line) => String(line || "").split(/\s+/).filter(Boolean).map(assEscape).join(" "))
+    .filter(Boolean);
   return `{\\1c&HFFFFFF&}${formatted.join("\\N")}`;
 }
 

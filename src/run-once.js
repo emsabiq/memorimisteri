@@ -162,12 +162,13 @@ async function generateNextSequentialPart(stories) {
 }
 
 async function generateForcedPart(stories) {
-  const generatedIdea = randomEpisodeSeed(stories);
-  const totalParts = clampPartTotal(process.env.MISTIS_TOTAL_PARTS || generatedIdea.totalParts);
+  const active = forcedPartNumber() > 1 ? findActiveEpisode(stories) : null;
+  const generatedIdea = active?.idea || randomEpisodeSeed(stories);
+  const totalParts = clampPartTotal(process.env.MISTIS_TOTAL_PARTS || active?.totalParts || generatedIdea.totalParts);
   const partNumber = Math.max(1, Math.min(forcedPartNumber(), totalParts));
   const input = {
     idea: process.env.MISTIS_IDEA || generatedIdea.idea,
-    episodeTitle: process.env.MISTIS_EPISODE_TITLE || "",
+    episodeTitle: process.env.MISTIS_EPISODE_TITLE || active?.title || "",
     protagonistName: process.env.MISTIS_PROTAGONIST_NAME || generatedIdea.protagonistName,
     protagonistProfile: process.env.MISTIS_PROTAGONIST_PROFILE || generatedIdea.protagonistProfile,
     theme: process.env.MISTIS_THEME || generatedIdea.theme,

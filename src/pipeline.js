@@ -1,7 +1,7 @@
 import { config } from "./config.js";
 import { estimateTtsUsd } from "./cost.js";
 import { generateElevenLabsSpeech } from "./elevenlabs.js";
-import { generateSceneImage, generateSpeech } from "./openai.js";
+import { generateSceneImage, generateSpeech, transcribeAudioCaptions } from "./openai.js";
 import { renderDraftVideo } from "./render.js";
 import { createStoryDraft } from "./story-engine.js";
 import { listStories, saveStory } from "./storage.js";
@@ -91,12 +91,27 @@ export async function ensureStoryAudio(story, options = {}) {
     story.input.ttsStyle = story.input.ttsStyle || ttsStyleName(story);
     story.cost.ttsUsd = estimateTtsUsd(text.length, story.input.ttsProvider, config.pricing);
     story.cost.totalUsd = Number((Number(story.cost.storyUsd || 0) + Number(story.cost.imageUsd || 0) + Number(story.cost.ttsUsd || 0)).toFixed(5));
+    story.assets.captions = await createCaptionTiming(story, warnings);
     story.updatedAt = nowIso();
     await saveStory(story);
   } catch (error) {
     if (options.strict) throw error;
     warnings.push(`TTS gagal: ${error.message}`);
     if (!Array.isArray(options.warnings)) throw error;
+  }
+}
+
+async function createCaptionTiming(story, warnings) {
+  if (!story.assets.audio?.path) return null;
+  try {
+    const captions = await transcribeAudioCaptions(story.assets.audio.path);
+    return {
+      ...captions,
+      generatedAt: nowIso()
+    };
+  } catch (error) {
+    warnings.push(`Caption timing transcribe gagal, fallback ke scene timing: ${error.message}`);
+    return null;
   }
 }
 
