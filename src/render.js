@@ -22,7 +22,7 @@ const introFreezeDuration = Number.isFinite(Number(process.env.INTRO_FREEZE_SECO
   : 0.8;
 const subtitleOffsetSeconds = Number.isFinite(Number(process.env.SUBTITLE_OFFSET_SECONDS))
   ? Number(process.env.SUBTITLE_OFFSET_SECONDS)
-  : 0.02;
+  : -0.22;
 const producerAudioDir = process.env.HORROR_AUDIO_DIR || "C:/Users/Lenovo/Downloads";
 const bundledAudioDir = path.join(paths.publicDir, "assets", "audio", "horror");
 const producerMusicDirs = [path.join(bundledAudioDir, "music"), producerAudioDir];
@@ -55,7 +55,7 @@ export async function renderDraftVideo(story) {
   const sourceAudioDuration = story.assets?.audio?.path ? await probeMediaDuration(story.assets.audio.path) : 0;
   const contentDuration = renderContentDuration(story, sourceAudioDuration);
   const narrationTempo = sourceAudioDuration > contentDuration && contentDuration > 0
-    ? clamp(sourceAudioDuration / contentDuration, 1, 1.12)
+    ? clamp(sourceAudioDuration / contentDuration, 1, 1.25)
     : 1;
   const captionScenes = buildRenderScenes(story, contentDuration);
   const scenes = [buildIntroCoverScene(story, captionScenes[0]), ...captionScenes, ...buildEndingScenes(story, captionScenes.at(-1))];
@@ -141,7 +141,11 @@ export async function renderDraftVideo(story) {
       renderedAt: nowIso(),
       scenes: segmentPaths.length,
       audio: audioKind,
-      durationSec: Number(totalDuration.toFixed(2))
+      durationSec: Number(totalDuration.toFixed(2)),
+      subtitleOffsetSec: Number(subtitleOffsetSeconds.toFixed(2)),
+      narrationSourceDurationSec: Number(sourceAudioDuration.toFixed(2)),
+      narrationTempo: Number(narrationTempo.toFixed(4)),
+      captionContentDurationSec: Number(contentDuration.toFixed(2))
     },
     fallbackImages
   };
@@ -167,7 +171,7 @@ function renderContentDuration(story, sourceAudioDuration) {
   const maxContentDuration = Math.max(8, safeMaxDuration - introFreezeDuration - jumpScareDuration - endCardDuration);
   const targetContentDuration = Math.max(8, requestedDuration - introFreezeDuration - jumpScareDuration - endCardDuration);
   if (sourceAudioDuration > 0) {
-    return Number(Math.min(Math.max(sourceAudioDuration, targetContentDuration), maxContentDuration).toFixed(2));
+    return Number(clamp(sourceAudioDuration, 8, maxContentDuration).toFixed(2));
   }
   return targetContentDuration;
 }
