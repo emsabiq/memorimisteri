@@ -952,6 +952,10 @@ button:not(:disabled):hover {
   overflow: hidden;
 }
 
+.studio-card.open {
+  grid-column: 1 / -1;
+}
+
 .studio-card-toggle {
   width: 100%;
   border: 0;
@@ -983,17 +987,42 @@ button:not(:disabled):hover {
   color: #f0c170;
 }
 
-.storyboard-list {
-  margin: 0;
-  padding: 0 12px 12px 30px;
-  color: #d8d0c8;
+.storyboard-grid {
   display: grid;
-  gap: 6px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  padding: 0 12px 12px;
 }
 
-.storyboard-list li {
+.storyboard-item {
+  border: 1px solid #352d29;
+  border-radius: 8px;
+  background: #0d0d0c;
+  padding: 11px;
+  display: grid;
+  align-content: start;
+  gap: 7px;
+  min-width: 0;
+}
+
+.storyboard-item strong,
+.storyboard-item p,
+.storyboard-item small {
+  overflow-wrap: anywhere;
+}
+
+.storyboard-item p,
+.storyboard-item small {
   font-size: 12px;
   line-height: 1.4;
+}
+
+.storyboard-item p {
+  color: #d8d0c8;
+}
+
+.storyboard-item small {
+  color: var(--muted);
 }
 
 .storyboard-hide {
@@ -1218,6 +1247,7 @@ button:not(:disabled):hover {
   .flow-steps,
   .studio-grid,
   .studio-summary,
+  .storyboard-grid,
   .field-grid,
   .form-actions {
     grid-template-columns: 1fr;

@@ -282,7 +282,7 @@ function buildPrompt(input, memory) {
   const existingOutline = Array.isArray(matchingEpisode?.outline)
     ? [
         "Outline Season yang sudah ada, pakai ini sebagai kontinuitas sampai tamat:",
-        ...matchingEpisode.outline.map((part) => `Episode ${part.episode || part.part}: ${part.title} - ${part.summary || part.cliffhanger || ""}`)
+        ...matchingEpisode.outline.map(outlineItemText)
       ].join("\n")
     : "";
   const continuity = previousParts.length
@@ -319,10 +319,11 @@ function buildPrompt(input, memory) {
     "Cerita harus membuat penonton merasa ada sesuatu yang salah sejak awal, lalu rasa takutnya naik pelan sampai ujung episode.",
     ...narrationStyleRules,
     "Kembalikan JSON valid saja dengan shape:",
-    "{ title, logline, hook, ending, season:{ title, totalEpisodes, currentEpisode, episodeTitle, arcSummary, episodeOutline:[{ episode, title, summary, cliffhanger, storyboards:[string] }] }, episode:{ title, totalParts, currentPart, partTitle, arcSummary, partOutline:[{ part, title, summary, cliffhanger, storyboards:[string] }] }, scenes:[{ index, durationSec, narration, screenText, imagePrompt, transition, effect, soundDesign }] }",
+    "{ title, logline, hook, ending, season:{ title, totalEpisodes, currentEpisode, episodeTitle, arcSummary, episodeOutline:[{ episode, title, summary, cliffhanger, storyboards:[{ beat, narration, imagePrompt }] }] }, episode:{ title, totalParts, currentPart, partTitle, arcSummary, partOutline:[{ part, title, summary, cliffhanger, storyboards:[{ beat, narration, imagePrompt }] }] }, scenes:[{ index, durationSec, narration, screenText, imagePrompt, transition, effect, soundDesign }] }",
     "Top-level title harus judul current episode, bukan judul Season. season.title adalah judul besar Season.",
-    "Season besar wajib punya outline lengkap 10 episode dari awal sampai tamat. Setiap item episodeOutline wajib berisi 8-10 storyboard beat singkat, jadi total Season terencana sekitar 100 storyboard. Script scenes detail tetap hanya untuk current episode.",
-    "Setiap episode punya 8-10 storyboard/scene yang nyambung dengan episode sebelum dan sesudahnya.",
+    "Season besar wajib punya outline lengkap 10 episode dari awal sampai tamat. Setiap item episodeOutline wajib berisi 8-10 storyboard object yang berbeda, jadi total Season terencana sekitar 100 storyboard. Script scenes detail tetap hanya untuk current episode.",
+    "Setiap storyboard object wajib punya beat, narration singkat, dan imagePrompt spesifik. Jangan mengisi storyboard dengan kalimat copy-paste.",
+    "Setiap episode punya 8-10 storyboard/scene yang nyambung dengan episode sebelum dan sesudahnya. Scenes current episode wajib mengembangkan storyboards episode saat ini, sehingga narration dan imagePrompt scene sesuai dengan storyboard.",
     "Durasi video current episode harus 1 sampai 2 menit, dan jangan melewati durasi yang diminta.",
     `Total narasi current episode sekitar ${words.min}-${words.max} kata agar TTS terdengar santai, punya jeda, dan tidak dipaksa dipercepat.`,
     "Hook harus langsung memancing rasa penasaran, tetapi narration scene 1 tetap mulai dari kejadian, bukan promosi.",
@@ -362,6 +363,20 @@ function narrationWordTarget(durationSec) {
     min: Math.max(70, Math.round(seconds * 1.45)),
     max: Math.max(95, Math.round(seconds * 2.0))
   };
+}
+
+function outlineItemText(part) {
+  const episode = part?.episode || part?.part || "";
+  const storyboards = Array.isArray(part?.storyboards)
+    ? part.storyboards.slice(0, 10).map((item, index) => {
+        if (typeof item === "string") return `${index + 1}. ${cleanText(item, 160)}`;
+        return `${index + 1}. ${cleanText(item?.beat || item?.screenText || item?.summary || "", 110)} | Narasi: ${cleanText(item?.narration || "", 170)} | Visual: ${cleanText(item?.imagePrompt || "", 190)}`;
+      }).filter(Boolean)
+    : [];
+  return [
+    `Episode ${episode}: ${part?.title || ""} - ${part?.summary || part?.cliffhanger || ""}`,
+    storyboards.length ? `Storyboard:\n${storyboards.join("\n")}` : ""
+  ].filter(Boolean).join("\n");
 }
 
 function normalizePlan(plan, input, memory) {
@@ -685,17 +700,46 @@ function normalizeOutlineStoryboards(storyboards, part, input) {
   const seen = new Set();
   const normalized = [];
   for (const item of list) {
-    const text = cleanText(item, 120);
-    const key = normalizeKey(text);
-    if (!text || seen.has(key)) continue;
+    const storyboard = normalizeStoryboardItem(item, part, normalized.length + 1, input);
+    const key = normalizeKey(`${storyboard.beat} ${storyboard.narration} ${storyboard.imagePrompt}`);
+    if (!storyboard.beat || seen.has(key)) continue;
     seen.add(key);
-    normalized.push(text);
+    normalized.push(storyboard);
     if (normalized.length >= 10) break;
   }
   while (normalized.length < 8) {
     normalized.push(defaultStoryboardBeat(part, normalized.length + 1, input));
   }
   return normalized;
+}
+
+function normalizeStoryboardItem(item, part, beat, input) {
+  if (typeof item === "string") {
+    const text = cleanText(item, 140);
+    return storyboardObject({ beat: text, narration: text, imagePrompt: storyboardImagePrompt(text, input, beat) }, part, beat, input);
+  }
+  return storyboardObject({
+    beat: cleanText(item?.beat || item?.screenText || item?.summary || item?.title || "", 140),
+    narration: cleanText(item?.narration || item?.voiceover || item?.text || item?.beat || "", 260),
+    imagePrompt: cleanText(item?.imagePrompt || item?.visual || item?.prompt || "", 420)
+  }, part, beat, input);
+}
+
+function storyboardObject(item, part, beat, input) {
+  const fallback = defaultStoryboardBeat(part, beat, input);
+  const beatText = cleanText(item.beat || fallback.beat, 140);
+  const narration = sanitizeNarrationForSpeech(cleanText(item.narration || fallback.narration || beatText, 260), input);
+  const imagePrompt = cleanText(item.imagePrompt || storyboardImagePrompt(beatText, input, beat), 420);
+  return {
+    beat: beatText,
+    narration,
+    imagePrompt
+  };
+}
+
+function storyboardImagePrompt(beatText, input, beat) {
+  const focus = visualFocusFromScene(beatText, input, beat - 1);
+  return `${focus}, ${beatText}, vertical 9:16 Indonesian cinematic horror storyboard, clear subject, moody night lighting, no text, no logo`;
 }
 
 function defaultStoryboardBeat(part, beat, input) {
@@ -752,7 +796,12 @@ function defaultStoryboardBeat(part, beat, input) {
     ]
   };
   const beats = byTheme[input.theme] || byTheme.rumah;
-  return `Episode ${part} beat ${beat}: ${beats[(beat - 1) % beats.length]}`;
+  const beatText = `Episode ${part} beat ${beat}: ${beats[(beat - 1) % beats.length]}`;
+  return {
+    beat: beatText,
+    narration: beats[(beat - 1) % beats.length],
+    imagePrompt: storyboardImagePrompt(beatText, input, beat)
+  };
 }
 
 function defaultPartSummary(part, input) {

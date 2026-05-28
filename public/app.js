@@ -316,7 +316,7 @@ function currentSeasonStory() {
   return withOutline || state.current || state.stories[0] || null;
 }
 
-function normalizeStudioOutline(story, total) {
+function normalizeStudioOutline(story, total, byEpisode = new Map()) {
   const season = story?.plan?.season || {};
   const episode = story?.plan?.episode || {};
   const raw = Array.isArray(season.episodeOutline)
@@ -327,7 +327,13 @@ function normalizeStudioOutline(story, total) {
   return Array.from({ length: total }, (_, index) => {
     const episodeNumber = index + 1;
     const item = raw.find((entry) => Number(entry?.episode || entry?.part || 0) === episodeNumber) || raw[index] || {};
-    const storyboards = Array.isArray(item.storyboards) ? item.storyboards.map((beat) => String(beat || "").trim()).filter(Boolean) : [];
+    const episodeStory = byEpisode.get(episodeNumber);
+    const sceneStoryboards = storyboardDetailsFromStory(episodeStory);
+    const storyboards = sceneStoryboards.length
+      ? sceneStoryboards
+      : Array.isArray(item.storyboards)
+        ? item.storyboards.map(normalizeStoryboardDetail).filter((detail) => detail.beat || detail.narration || detail.imagePrompt)
+        : [];
     return {
       episode: episodeNumber,
       title: item.title || "",
@@ -341,6 +347,24 @@ function storiesForSeason(title) {
   const key = normalizeKey(title);
   if (!key) return state.stories;
   return state.stories.filter((story) => normalizeKey(seasonMeta(story).title || story.title) === key);
+}
+
+function storyboardDetailsFromStory(story) {
+  const scenes = Array.isArray(story?.plan?.scenes) ? story.plan.scenes : [];
+  return scenes.map((scene) => normalizeStoryboardDetail({
+    beat: scene.screenText || `Scene ${scene.index || ""}`,
+    narration: scene.narration || "",
+    imagePrompt: scene.imagePrompt || ""
+  })).filter((detail) => detail.beat || detail.narration || detail.imagePrompt);
+}
+
+function normalizeStoryboardDetail(item) {
+  if (typeof item === "string") return { beat: item.trim(), narration: "", imagePrompt: "" };
+  return {
+    beat: String(item?.beat || item?.screenText || item?.summary || item?.title || "").trim(),
+    narration: String(item?.narration || item?.voiceover || item?.text || "").trim(),
+    imagePrompt: String(item?.imagePrompt || item?.visual || item?.prompt || "").trim()
+  };
 }
 
 function groupByEpisode(stories) {
@@ -375,9 +399,9 @@ function renderStudio() {
 
   const meta = seasonMeta(baseStory);
   const total = Math.max(10, Number(meta.total || 10));
-  const outline = normalizeStudioOutline(baseStory, total);
   const seasonStories = storiesForSeason(meta.title);
   const byEpisode = new Map(seasonStories.map((story) => [Number(seasonMeta(story).current || story.input?.partNumber || 0), story]));
+  const outline = normalizeStudioOutline(baseStory, total, byEpisode);
   const ready = outline.filter((item) => item.storyboards.length >= 8).length;
   const uploaded = seasonStories.filter((story) => story.publish?.state === "uploaded").length;
   const rendered = seasonStories.filter((story) => Boolean(story.assets?.video?.url || story.assets?.video?.path)).length;
@@ -412,18 +436,25 @@ function renderStudio() {
     const stateLabel = isUploaded ? "Uploaded" : videoReady ? "Video siap" : storyReady ? "Outline siap" : "Butuh storyboard";
     const isOpen = state.studioOpenEpisode === item.episode;
     return `
-      <article class="studio-card ${isUploaded ? "done" : videoReady ? "ready" : storyReady ? "planned" : "missing"}">
+      <article class="studio-card ${isOpen ? "open" : ""} ${isUploaded ? "done" : videoReady ? "ready" : storyReady ? "planned" : "missing"}">
         <button class="studio-card-toggle" type="button" data-episode="${item.episode}" aria-expanded="${isOpen}">
           <span>Episode ${item.episode}/${total}</span>
           <strong>${escapeHtml(item.title || `Episode ${item.episode}`)}</strong>
           <small>${item.storyboards.length} storyboard</small>
-          <p>${escapeHtml((item.summary || item.storyboards.slice(0, 2).join(" - ")).slice(0, 180))}</p>
+          <p>${escapeHtml((item.summary || item.storyboards.slice(0, 2).map((board) => board.beat).join(" - ")).slice(0, 180))}</p>
           <em>${escapeHtml(isOpen ? "Hide storyboard" : stateLabel)}</em>
         </button>
         ${isOpen ? `
-          <ol class="storyboard-list">
-            ${item.storyboards.map((beat) => `<li>${escapeHtml(beat)}</li>`).join("") || "<li>Storyboard belum tersedia.</li>"}
-          </ol>
+          <div class="storyboard-grid">
+            ${item.storyboards.map((board, boardIndex) => `
+              <section class="storyboard-item">
+                <span>Storyboard ${boardIndex + 1}</span>
+                <strong>${escapeHtml(board.beat || `Beat ${boardIndex + 1}`)}</strong>
+                <p>${escapeHtml(board.narration || "Narasi belum tersedia.")}</p>
+                <small>${escapeHtml(board.imagePrompt || "Image prompt belum tersedia.")}</small>
+              </section>
+            `).join("") || `<div class="empty-state">Storyboard belum tersedia.</div>`}
+          </div>
           <button class="storyboard-hide secondary compact-action" type="button" data-episode="0">Hide storyboard</button>
         ` : ""}
       </article>

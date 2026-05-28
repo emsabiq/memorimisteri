@@ -56,7 +56,7 @@ export async function publishToSocials({ videoUrl, title, description, coverUrl,
   const result = { ok: false, errors: {} };
   if (config.automation.facebook) {
     try {
-      result.facebook = await publishToFacebook({ videoUrl, title, description });
+      result.facebook = await publishToFacebook({ videoUrl, title, description, coverUrl });
     } catch (error) {
       result.errors.facebook = error.message;
     }
@@ -104,7 +104,7 @@ async function resolvePageAccessToken() {
   return page.access_token;
 }
 
-async function publishToFacebook({ videoUrl, title, description }) {
+async function publishToFacebook({ videoUrl, title, description, coverUrl }) {
   if (!config.facebook.pageId || (!config.facebook.accessToken && !config.facebook.userAccessToken)) {
     throw new Error("FACEBOOK_PAGE_ID dan token belum lengkap.");
   }
@@ -116,19 +116,19 @@ async function publishToFacebook({ videoUrl, title, description }) {
     await sleep(Math.min(240, settleSeconds) * 1000);
   }
   if (config.facebook.mediaType === "video") {
-    return publishFacebookVideo({ token, videoUrl, title, description });
+    return publishFacebookVideo({ token, videoUrl, title, description, coverUrl });
   }
 
   try {
-    return await publishFacebookReel({ token, videoUrl, description });
+    return await publishFacebookReel({ token, videoUrl, description, coverUrl });
   } catch (error) {
     console.warn(`Facebook Reel gagal, fallback ke Page video: ${error.message}`);
-    const fallback = await publishFacebookVideo({ token, videoUrl, title, description });
+    const fallback = await publishFacebookVideo({ token, videoUrl, title, description, coverUrl });
     return { ...fallback, fallbackFrom: "facebook_reel", reelError: error.message };
   }
 }
 
-async function publishFacebookVideo({ token, videoUrl, title, description }) {
+async function publishFacebookVideo({ token, videoUrl, title, description, coverUrl }) {
   const body = new URLSearchParams({
     access_token: token,
     file_url: videoUrl,
@@ -136,15 +136,16 @@ async function publishFacebookVideo({ token, videoUrl, title, description }) {
     description: clean(description).slice(0, 4900),
     published: String(config.facebook.videoState).toUpperCase() === "PUBLISHED" ? "true" : "false"
   });
+  if (coverUrl) body.set("thumbnail_url", coverUrl);
   const data = await retryFacebookMediaFetch("Facebook video file_url", () => fetchJson(graphVideoUrl(`${config.facebook.pageId}/videos`), {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body
   }));
-  return { ok: Boolean(data.id), type: "facebook_video", id: clean(data.id), url: data.id ? `https://www.facebook.com/${data.id}` : "" };
+  return { ok: Boolean(data.id), type: "facebook_video", id: clean(data.id), url: data.id ? `https://www.facebook.com/${data.id}` : "", coverUrl: coverUrl || "" };
 }
 
-async function publishFacebookReel({ token, videoUrl, description }) {
+async function publishFacebookReel({ token, videoUrl, description, coverUrl }) {
   const startUrl = new URL(graphUrl(`${config.facebook.pageId}/video_reels`));
   startUrl.searchParams.set("access_token", token);
   startUrl.searchParams.set("upload_phase", "start");
@@ -163,7 +164,7 @@ async function publishFacebookReel({ token, videoUrl, description }) {
   finishUrl.searchParams.set("video_state", config.facebook.videoState || "PUBLISHED");
   finishUrl.searchParams.set("description", clean(description).slice(0, 4900));
   await retryFacebookMediaFetch("Facebook Reel finish", () => fetchJson(finishUrl, { method: "POST" }));
-  return { ok: true, type: "facebook_reel", id: videoId, url: `https://www.facebook.com/reel/${videoId}` };
+  return { ok: true, type: "facebook_reel", id: videoId, url: `https://www.facebook.com/reel/${videoId}`, coverUrl: coverUrl || "", coverStrategy: "title_cover_first_frame" };
 }
 
 async function publishToInstagram({ videoUrl, title, description, coverUrl, durationSec }) {
@@ -199,7 +200,7 @@ async function publishToInstagram({ videoUrl, title, description, coverUrl, dura
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: publishBody
   });
-  return { ok: Boolean(published.id), type: "instagram_reel", id: clean(published.id), containerId: creationId };
+  return { ok: Boolean(published.id), type: "instagram_reel", id: clean(published.id), containerId: creationId, coverUrl: coverUrl || "" };
 }
 
 async function publishToThreads({ videoUrl, text }) {
