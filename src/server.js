@@ -262,8 +262,8 @@ function renderFanPage({ message = "", error = "", posted = false } = {}) {
         <section class="fan-grid">
           <form id="fanForm" class="panel fan-form fan-form-featured" method="post" action="/fan.php" enctype="multipart/form-data">
             <div class="fan-form-head">
-              <strong>Form kiriman</strong>
-              <span>Audio minimal 20 detik, teks minimal 250 karakter.</span>
+              <strong>Ruang cerita penggemar</strong>
+              <span>Rekaman minimal 20 detik, teks minimal 250 karakter. Kiriman masuk review dulu sebelum menjadi episode.</span>
             </div>
             <div class="field-grid">
               <label><span>Nama panggilan</span><input name="fanName" maxlength="80" placeholder="Boleh anonim"></label>
@@ -271,7 +271,7 @@ function renderFanPage({ message = "", error = "", posted = false } = {}) {
             </div>
             <label><span>Judul cerita</span><input name="title" maxlength="120" placeholder="Contoh: Suara dari kamar kosong" required></label>
             <label><span>File rekaman / teks</span><input name="storyFile" type="file" accept=".mp3,.wav,.m4a,.aac,.ogg,.opus,.webm,.mp4,.txt,.md,.docx" required></label>
-            <label><span>Teks tambahan</span><textarea name="storyText" rows="8" placeholder="Tulis kronologi singkat, nama samaran, lokasi umum, dan bagian paling seram."></textarea></label>
+            <label><span>Teks tambahan</span><textarea name="storyText" rows="8" placeholder="Tulis kronologi singkat, nama samaran, lokasi umum, urutan kejadian, dan bagian paling seram. Kalau ceritanya belum rapi, sistem akan membantu merapikan tanpa mengubah inti cerita."></textarea></label>
             <label><span>Catatan privasi</span><textarea name="note" rows="3" placeholder="Bagian yang harus disamarkan, nama yang tidak boleh disebut, atau izin kredit nama."></textarea></label>
             <label class="consent-row"><input name="consent" type="checkbox" value="yes" required><span>Saya setuju cerita ini direview dan boleh diadaptasi menjadi konten Memori Misteri dengan penyamaran seperlunya.</span></label>
             <button class="primary fan-submit" type="submit">Kirim ke antrian</button>
@@ -281,7 +281,7 @@ function renderFanPage({ message = "", error = "", posted = false } = {}) {
             <div class="fan-info-list">
               <div><strong>Rekaman</strong><span>MP3, WAV, M4A, AAC, OGG, OPUS, WEBM, atau MP4.</span></div>
               <div><strong>Teks</strong><span>TXT, MD, atau DOCX. Cerita pendek boleh, asal detailnya cukup.</span></div>
-              <div><strong>Review dulu</strong><span>Semua kiriman masuk dashboard dan tidak langsung dipublikasikan.</span></div>
+              <div><strong>Accept proses</strong><span>Semua kiriman masuk dashboard. Kalau lolos syarat, cerita ditranscribe, dianalisis, dirapikan, lalu dibuat menjadi 1 episode otomatis.</span></div>
             </div>
           </aside>
         </section>`;
@@ -299,11 +299,16 @@ function renderFanPage({ message = "", error = "", posted = false } = {}) {
         <div class="fan-hero-copy">
           <p class="eyebrow">Memori Misteri</p>
           <h1>Kirim cerita serammu</h1>
-          <p>Rekaman atau teks masuk ke antrian dashboard dulu. Setelah disetujui, ceritamu bisa diolah menjadi episode serial Memori Misteri.</p>
+          <p>Tempat penggemar mengirim rekaman, dokumen, atau teks kejadian mistis. Cerita yang memenuhi syarat masuk antrian dashboard untuk ditranscribe, dirapikan, dan disiapkan menjadi episode.</p>
         </div>
         <div class="fan-steps" aria-label="Alur kiriman">
-          <span>1. Kirim</span><span>2. Review</span><span>3. Transcribe</span><span>4. Jadi episode</span>
+          <span>1. Kirim file</span><span>2. Accept review</span><span>3. Transcribe & rapikan</span><span>4. Jadi episode</span>
         </div>
+      </section>
+      <section class="fan-proof-grid" aria-label="Syarat kiriman">
+        <div><strong>Audio</strong><span>Minimal 20 detik, suara cukup jelas, boleh cerita spontan.</span></div>
+        <div><strong>Dokumen</strong><span>TXT, MD, atau DOCX minimal 250 karakter.</span></div>
+        <div><strong>Privasi</strong><span>Nama, lokasi, dan detail sensitif bisa disamarkan.</span></div>
       </section>
       ${alert}
       ${form}

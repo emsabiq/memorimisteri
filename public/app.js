@@ -241,7 +241,7 @@ async function storyFromCurrentSubmission() {
   await busy("Membuat draft episode", async () => {
     const data = await fetchJson(`/api/submissions/${state.currentSubmission.id}/story`, {
       method: "POST",
-      body: JSON.stringify({ totalParts: 10, partNumber: 1, durationSec: 60, sceneCount: 8, theme: "rumah" })
+      body: JSON.stringify({})
     });
     state.currentSubmission = data.submission;
     state.current = data.story;

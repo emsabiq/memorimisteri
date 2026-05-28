@@ -62,13 +62,15 @@ export const config = {
     imageQuality: clean(process.env.IMAGE_QUALITY || "low"),
     ttsModel: clean(process.env.OPENAI_TTS_MODEL || process.env.TTS_MODEL || "gpt-4o-mini-tts"),
     ttsVoice: clean(process.env.OPENAI_TTS_VOICE || process.env.TTS_VOICE || "shimmer"),
+    ttsVoices: clean(process.env.OPENAI_TTS_VOICES || "nova,shimmer,coral,verse,sage,alloy").split(",").map((item) => clean(item)).filter(Boolean),
     transcribeModel: clean(process.env.OPENAI_TRANSCRIBE_MODEL || "whisper-1"),
     ttsEffectsEnabled: boolEnv("TTS_EFFECTS_ENABLED", true)
   },
   elevenlabs: {
     apiKey: process.env.ELEVENLABS_API_KEY || "",
     model: clean(process.env.ELEVENLABS_MODEL || "eleven_multilingual_v2"),
-    voiceId: clean(process.env.ELEVENLABS_VOICE_ID || "pFZP5JQG7iQjIQuC4Bku")
+    voiceId: clean(process.env.ELEVENLABS_VOICE_ID || "pFZP5JQG7iQjIQuC4Bku"),
+    voiceIds: clean(process.env.ELEVENLABS_VOICE_IDS || process.env.ELEVENLABS_VOICE_ID || "pFZP5JQG7iQjIQuC4Bku").split(",").map((item) => clean(item)).filter(Boolean)
   },
   pricing: {
     storyInputUsdPer1MTokens: numberEnv("STORY_INPUT_USD_PER_1M_TOKENS", 0.4),
@@ -135,6 +137,7 @@ export function publicConfig() {
       imageQuality: config.openai.imageQuality,
       ttsModel: config.openai.ttsModel,
       ttsVoice: config.openai.ttsVoice,
+      ttsVoices: config.openai.ttsVoices,
       openaiTranscribeModel: config.openai.transcribeModel,
       elevenlabs: Boolean(config.elevenlabs.apiKey),
       elevenlabsModel: config.elevenlabs.model

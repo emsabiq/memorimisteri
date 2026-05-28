@@ -214,9 +214,9 @@ export async function createStoryDraft(input, context = {}) {
 }
 
 function normalizeInput(input) {
-  const durationSec = clamp(Number(input.durationSec || 60), 45, 60);
-  const sceneCount = clamp(Number(input.sceneCount || 8), 6, 10);
-  const totalParts = clamp(Number(input.totalParts || 10), 6, 20);
+  const durationSec = clamp(Number(input.durationSec || 85), 60, 115);
+  const sceneCount = clamp(Number(input.sceneCount || 9), 7, 11);
+  const totalParts = clamp(Number(input.totalParts || 10), 7, 13);
   const partNumber = clamp(Number(input.partNumber || 1), 1, totalParts);
   return {
     idea: cleanText(input.idea || "Di rumah kosong dekat sawah, ada suara perempuan menyanyi dari sumur tua setiap malam Jumat.", 1200),
@@ -274,9 +274,9 @@ function buildPrompt(input, memory) {
     ...narrationStyleRules,
     "Kembalikan JSON valid saja dengan shape:",
     "{ title, logline, hook, ending, episode:{ title, totalParts, currentPart, partTitle, arcSummary, partOutline:[{ part, title, summary, cliffhanger }] }, scenes:[{ index, durationSec, narration, screenText, imagePrompt, transition, effect, soundDesign }] }",
-    "Episode besar harus punya outline 10 part atau sesuai Total part. Script scenes hanya untuk Current part.",
-    "Durasi video current part harus sekitar 1 menit dan tidak boleh lewat 60 detik.",
-    "Total narasi current part sekitar 105-130 kata agar TTS terdengar lega, tidak terburu-buru.",
+    "Episode besar harus punya outline sesuai Total part, minimal 7 part dan maksimal 13 part. Script scenes hanya untuk Current part.",
+    "Durasi video current part harus 1 sampai 2 menit, dan jangan melewati durasi yang diminta.",
+    "Total narasi current part sekitar 130-220 kata agar TTS terdengar lega, tidak terburu-buru.",
     "Hook harus langsung memancing rasa penasaran, tetapi narration scene 1 tetap mulai dari kejadian, bukan promosi.",
     "Setiap narration harus terasa seperti ucapan yang bisa direkam langsung: ada rasa spontan, tapi tetap jelas dan tidak bertele-tele.",
     "Bayangkan semua narration akan digabung menjadi satu audio TTS. Karena itu alurnya harus nyambung, tanpa lompatan bahasa yang terasa ditempel.",

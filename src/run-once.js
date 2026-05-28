@@ -99,46 +99,111 @@ async function importRemoteStories() {
 }
 
 async function generateNextSequentialPart(stories) {
-  const episodeTitle = process.env.MISTIS_EPISODE_TITLE || process.env.EPISODE_TITLE || "";
-  const totalParts = Number(process.env.MISTIS_TOTAL_PARTS || process.env.TOTAL_PARTS || 10);
-  const group = stories.filter((story) => {
-    if (!episodeTitle) return true;
-    return episodeKey(story) === episodeTitle.toLowerCase();
-  });
-  const completedParts = new Set(group
-    .map((story) => Number(story.plan?.episode?.currentPart || story.input?.partNumber || 0))
-    .filter(Boolean));
-  let partNumber = 1;
-  while (completedParts.has(partNumber) && partNumber < totalParts) partNumber += 1;
-  const finishedEpisode = completedParts.size >= totalParts && completedParts.has(totalParts);
-  const nextEpisodeTitle = finishedEpisode ? nextEpisodeName(episodeTitle || process.env.MISTIS_DEFAULT_EPISODE || "Memori Misteri Harian", stories) : episodeTitle;
-
+  const active = findActiveEpisode(stories);
+  const generatedIdea = active ? active.idea : randomEpisodeSeed(stories);
+  const totalParts = active?.totalParts || generatedIdea.totalParts;
+  const partNumber = active?.nextPart || 1;
   const input = {
-    idea: process.env.MISTIS_IDEA || "Cerita mistis serial dari follower Memorimisteri tentang kejadian aneh yang awalnya kecil, lalu makin dekat dan sulit dijelaskan.",
-    episodeTitle: nextEpisodeTitle || process.env.MISTIS_DEFAULT_EPISODE || "Memori Misteri Harian",
-    protagonistName: process.env.MISTIS_PROTAGONIST_NAME || "Aku",
-    protagonistProfile: process.env.MISTIS_PROTAGONIST_PROFILE || "",
-    theme: process.env.MISTIS_THEME || "rumah",
-    tone: process.env.MISTIS_TONE || "seram pelan, natural, seperti cerita pengalaman pribadi follower Memorimisteri",
-    durationSec: Number(process.env.MISTIS_DURATION || 60),
-    sceneCount: Number(process.env.MISTIS_SCENES || 8),
+    idea: process.env.MISTIS_IDEA || generatedIdea.idea,
+    episodeTitle: active?.title || "",
+    protagonistName: process.env.MISTIS_PROTAGONIST_NAME || generatedIdea.protagonistName,
+    protagonistProfile: process.env.MISTIS_PROTAGONIST_PROFILE || generatedIdea.protagonistProfile,
+    theme: process.env.MISTIS_THEME || generatedIdea.theme,
+    tone: process.env.MISTIS_TONE || generatedIdea.tone,
+    durationSec: Number(process.env.MISTIS_DURATION || generatedIdea.durationSec),
+    sceneCount: Number(process.env.MISTIS_SCENES || generatedIdea.sceneCount),
     totalParts,
-    partNumber: finishedEpisode ? 1 : partNumber,
+    partNumber,
     imageQuality: process.env.IMAGE_QUALITY || "low",
     imageSize: process.env.IMAGE_SIZE || "1024x1536",
-    ttsProvider: process.env.MISTIS_TTS_PROVIDER || "elevenlabs"
+    ttsProvider: process.env.MISTIS_TTS_PROVIDER || "elevenlabs",
+    ttsStyle: generatedIdea.ttsStyle
   };
   return generateFullStory(input, { ttsProvider: input.ttsProvider });
 }
 
-function nextEpisodeName(baseTitle, stories) {
-  const base = String(baseTitle || "Memori Misteri Harian").replace(/\s+#\d+$/g, "").trim();
-  const used = new Set(stories.map((story) => episodeKey(story)).filter(Boolean));
-  for (let index = 2; index < 1000; index += 1) {
-    const title = `${base} #${index}`;
-    if (!used.has(title.toLowerCase())) return title;
+function findActiveEpisode(stories) {
+  const groups = new Map();
+  for (const story of stories) {
+    const title = episodeKey(story);
+    if (!title) continue;
+    if (!groups.has(title)) groups.set(title, []);
+    groups.get(title).push(story);
   }
-  return `${base} #${Date.now().toString().slice(-6)}`;
+  const candidates = [...groups.entries()].map(([title, group]) => {
+    const totalParts = clampPartTotal(Math.max(...group.map((story) => Number(story.plan?.episode?.totalParts || story.input?.totalParts || 0))));
+    const uploaded = new Set(group
+      .filter((story) => story.publish?.state === "uploaded")
+      .map((story) => Number(story.plan?.episode?.currentPart || story.input?.partNumber || 0))
+      .filter(Boolean));
+    let nextPart = 1;
+    while (uploaded.has(nextPart) && nextPart < totalParts) nextPart += 1;
+    const complete = uploaded.size >= totalParts && uploaded.has(totalParts);
+    const newest = Math.max(...group.map((story) => new Date(story.updatedAt || story.createdAt || 0).getTime()).filter(Number.isFinite));
+    const base = group[0] || {};
+    return {
+      title: base.plan?.episode?.title || base.input?.episodeTitle || title,
+      totalParts,
+      nextPart,
+      complete,
+      newest,
+      idea: {
+        idea: base.input?.idea || base.plan?.episode?.arcSummary || base.plan?.logline,
+        protagonistName: base.input?.protagonistName || "Aku",
+        protagonistProfile: base.input?.protagonistProfile || "",
+        theme: base.input?.theme || "rumah",
+        tone: base.input?.tone || "seram pelan, natural, seperti cerita pengalaman pribadi follower Memorimisteri",
+        durationSec: base.input?.durationSec || 85,
+        sceneCount: base.input?.sceneCount || 9,
+        ttsStyle: base.input?.ttsStyle || ""
+      }
+    };
+  }).filter((item) => !item.complete);
+  return candidates.sort((a, b) => b.newest - a.newest)[0] || null;
+}
+
+function randomEpisodeSeed(stories) {
+  const themes = ["rumah", "kos", "jalan", "pendaki", "mimpi"];
+  const names = ["Raka", "Naya", "Dimas", "Laras", "Ari", "Mira", "Bagas", "Sinta", "Reno", "Tari"];
+  const places = [
+    "rumah kontrakan belakang pasar yang lampunya menyala sendiri setiap jam dua malam",
+    "kos lama di ujung gang yang punya kamar tanpa nomor",
+    "jalan kampung dekat kebun tebu yang selalu membuat pengendara kembali ke titik awal",
+    "villa kosong dekat hutan pinus yang masih menyimpan pesan suara penyewa sebelumnya",
+    "warung tutup di pinggir sawah yang menerima pesanan dari nomor tidak dikenal",
+    "jalur pendakian berkabut tempat peluit terdengar dari arah jurang",
+    "rumah keluarga setelah pemakaman, ketika suara orang yang sudah tiada masih masuk lewat pesan suara"
+  ];
+  const fears = [
+    "suara ketukan kecil yang makin dekat",
+    "bayangan yang muncul duluan di pantulan kaca",
+    "pesan suara dari nomor yang sudah tidak aktif",
+    "jejak basah yang berhenti tepat di depan tempat tidur",
+    "pintu terkunci yang membuka dari sisi dalam",
+    "rekaman HP yang memutar suara narator sendiri"
+  ];
+  const styles = ["bisik tegang", "tenang menahan takut", "voice note tengah malam", "narator pelan sinematik", "cemas tapi jelas"];
+  const index = stories.length + new Date().getDate();
+  const protagonistName = names[index % names.length];
+  const theme = themes[index % themes.length];
+  const place = places[index % places.length];
+  const fear = fears[(index + 2) % fears.length];
+  return {
+    idea: `Buat episode serial Memori Misteri original tentang ${protagonistName} yang mengalami gangguan di ${place}. Teror utama dimulai dari ${fear}, lalu setiap part membuka petunjuk baru tanpa kehilangan rasa cerita nyata.`,
+    protagonistName,
+    protagonistProfile: `${protagonistName}, orang Indonesia dewasa, wajah lelah tapi penasaran, pakaian gelap sederhana, membawa HP dan senter kecil untuk kontinuitas visual`,
+    theme,
+    tone: "seram pelan, rapi, terasa seperti cerita pengalaman nyata, twist bertahap, tidak gore",
+    durationSec: 75 + ((index * 7) % 36),
+    sceneCount: 8 + (index % 3),
+    totalParts: 7 + (index % 7),
+    ttsStyle: styles[index % styles.length]
+  };
+}
+
+function clampPartTotal(value) {
+  const number = Number(value || 10);
+  return Math.max(7, Math.min(13, Number.isFinite(number) ? number : 10));
 }
 
 function nextSequentialStory(stories) {

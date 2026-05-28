@@ -129,8 +129,8 @@ export async function approveSubmissionToStory(id, input = {}) {
     theme: input.theme || "rumah",
     totalParts: input.totalParts || 10,
     partNumber: input.partNumber || 1,
-    durationSec: input.durationSec || 60,
-    sceneCount: input.sceneCount || 8,
+    durationSec: input.durationSec || 85,
+    sceneCount: input.sceneCount || 9,
     imageQuality: input.imageQuality || config.openai.imageQuality,
     tone: input.tone || "seram pelan, terasa seperti cerita nyata dari follower, rapi untuk serial memorimisteri"
   };

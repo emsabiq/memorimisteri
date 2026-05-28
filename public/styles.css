@@ -111,6 +111,14 @@ body {
   line-height: 1;
 }
 
+.hero-subtitle {
+  color: #d8d0c8;
+  font-size: 17px;
+  line-height: 1.45;
+  margin-top: 10px;
+  max-width: 760px;
+}
+
 .status-lamps {
   display: flex;
   gap: 8px;
@@ -550,6 +558,34 @@ button:not(:disabled):hover {
   color: #f0d69a;
   font-size: 12px;
   padding: 8px 10px;
+}
+
+.fan-proof-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.fan-proof-grid div {
+  min-height: 104px;
+  border: 1px solid rgba(226, 196, 131, 0.2);
+  border-radius: 8px;
+  background:
+    linear-gradient(180deg, rgba(29, 24, 21, 0.88), rgba(12, 13, 12, 0.94));
+  display: grid;
+  align-content: start;
+  gap: 7px;
+  padding: 14px;
+}
+
+.fan-proof-grid strong {
+  color: #f0d69a;
+}
+
+.fan-proof-grid span {
+  color: #bdb2a9;
+  font-size: 13px;
+  line-height: 1.45;
 }
 
 .fan-grid {
@@ -1019,6 +1055,10 @@ button:not(:disabled):hover {
   }
 
   .fan-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .fan-proof-grid {
     grid-template-columns: 1fr;
   }
 

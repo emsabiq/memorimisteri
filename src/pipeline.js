@@ -55,18 +55,23 @@ export async function ensureStoryAudio(story, options = {}) {
 
   try {
     const text = narrationTextForTts(story);
+    const voice = pickTtsVoice(story, provider);
+    const instructions = ttsInstructions(story);
     try {
       story.assets.audio = provider === "elevenlabs"
-        ? await generateElevenLabsSpeech({ storyId: story.id, text, filenameSuffix: "elevenlabs-female-horror" })
-        : await generateSpeech({ storyId: story.id, text, voice: config.openai.ttsVoice, filenameSuffix: "openai-female-horror" });
+        ? await generateElevenLabsSpeech({ storyId: story.id, text, voiceId: voice, filenameSuffix: `elevenlabs-${voice}` })
+        : await generateSpeech({ storyId: story.id, text, voice, instructions, filenameSuffix: `openai-${voice}` });
     } catch (error) {
       if (provider !== "elevenlabs") throw error;
       warnings.push(`ElevenLabs gagal/habis kuota, fallback langsung ke OpenAI: ${error.message}`);
-      story.assets.audio = await generateSpeech({ storyId: story.id, text, voice: config.openai.ttsVoice, filenameSuffix: "openai-fallback-after-elevenlabs" });
+      const fallbackVoice = pickTtsVoice(story, "openai");
+      story.assets.audio = await generateSpeech({ storyId: story.id, text, voice: fallbackVoice, instructions, filenameSuffix: `openai-${fallbackVoice}-fallback-after-elevenlabs` });
       story.assets.audio.fallbackFrom = "elevenlabs";
     }
     story.assets.audio.characters = text.length;
     story.input.ttsProvider = story.assets.audio.provider || provider;
+    story.input.ttsVoice = story.assets.audio.voice || story.assets.audio.voiceId || voice;
+    story.input.ttsStyle = story.input.ttsStyle || ttsStyleName(story);
     story.cost.ttsUsd = estimateTtsUsd(text.length, story.input.ttsProvider, config.pricing);
     story.cost.totalUsd = Number((Number(story.cost.storyUsd || 0) + Number(story.cost.imageUsd || 0) + Number(story.cost.ttsUsd || 0)).toFixed(5));
     story.updatedAt = nowIso();
@@ -76,6 +81,34 @@ export async function ensureStoryAudio(story, options = {}) {
     warnings.push(`TTS gagal: ${error.message}`);
     if (!Array.isArray(options.warnings)) throw error;
   }
+}
+
+function pickTtsVoice(story, provider) {
+  const list = provider === "elevenlabs" ? config.elevenlabs.voiceIds : config.openai.ttsVoices;
+  const voices = Array.isArray(list) && list.length ? list : [provider === "elevenlabs" ? config.elevenlabs.voiceId : config.openai.ttsVoice];
+  const seed = `${story.plan?.episode?.title || story.title || story.id}:${story.plan?.episode?.currentPart || 1}`;
+  return voices[Math.abs(hash(seed)) % voices.length];
+}
+
+function ttsStyleName(story) {
+  const styles = ["bisik tegang", "tenang menahan takut", "voice note tengah malam", "narator pelan sinematik", "cemas tapi jelas"];
+  return styles[Math.abs(hash(story.plan?.episode?.title || story.title || story.id)) % styles.length];
+}
+
+function ttsInstructions(story) {
+  const style = story.input?.ttsStyle || ttsStyleName(story);
+  return [
+    "Bacakan sepenuhnya dalam Bahasa Indonesia dengan pelafalan Indonesia natural.",
+    `Gaya suara: ${style}.`,
+    "Terdengar seperti orang Indonesia sedang menceritakan pengalaman mistis sungguhan di ruangan gelap.",
+    "Baca sebagai satu cerita sambung, bukan potongan scene. Pakai napas natural, jeda tegang, jelas, tidak berlebihan, dan bukan gaya iklan."
+  ].join(" ");
+}
+
+function hash(value) {
+  let result = 0;
+  for (const char of String(value || "")) result = ((result << 5) - result) + char.charCodeAt(0);
+  return result;
 }
 
 export async function renderAndPersist(story) {

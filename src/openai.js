@@ -66,7 +66,7 @@ export async function generateSceneImage({ storyId, scene, size, quality }) {
   };
 }
 
-export async function generateSpeech({ storyId, text, voice, filenameSuffix = "openai" }) {
+export async function generateSpeech({ storyId, text, voice, instructions, filenameSuffix = "openai" }) {
   assertOpenAi();
   await fs.mkdir(paths.audioDir, { recursive: true });
   const filename = `${storyId}-${safeFilename(filenameSuffix)}-narration.mp3`;
@@ -79,7 +79,7 @@ export async function generateSpeech({ storyId, text, voice, filenameSuffix = "o
       model: config.openai.ttsModel,
       voice: voice || config.openai.ttsVoice,
       input: text,
-      instructions: "Bacakan sepenuhnya dalam Bahasa Indonesia dengan pelafalan Indonesia natural. Suaranya perempuan, dekat, pelan, dan tegang, seperti orang Indonesia sedang live story telling pengalaman mistis sungguhan kepada teman di ruangan gelap. Jangan terdengar membaca potongan scene; baca sebagai satu cerita sambung dengan napas natural, sedikit ragu di bagian menakutkan, dan bisikkan kalimat yang terasa paling dekat. Tetap jelas, tidak berlebihan, dan bukan gaya iklan.",
+      instructions: instructions || "Bacakan sepenuhnya dalam Bahasa Indonesia dengan pelafalan Indonesia natural. Suaranya dekat, pelan, dan tegang, seperti orang Indonesia sedang live story telling pengalaman mistis sungguhan kepada teman di ruangan gelap. Jangan terdengar membaca potongan scene; baca sebagai satu cerita sambung dengan napas natural, sedikit ragu di bagian menakutkan, dan bisikkan kalimat yang terasa paling dekat. Tetap jelas, tidak berlebihan, dan bukan gaya iklan.",
       response_format: "mp3"
     })
   });
