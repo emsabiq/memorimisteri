@@ -125,7 +125,7 @@ export async function approveSubmissionToStory(id, input = {}) {
       submission.note ? `Catatan: ${submission.note}` : ""
     ].filter(Boolean).join("\n\n"),
     episodeTitle: input.episodeTitle || submission.title || "",
-    protagonistName: input.protagonistName || "Aku",
+    protagonistName: input.protagonistName || "Saya",
     theme: input.theme || "rumah",
     totalParts: input.totalParts || 10,
     partNumber: input.partNumber || 1,

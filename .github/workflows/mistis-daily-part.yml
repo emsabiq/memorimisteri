@@ -82,20 +82,17 @@ jobs:
       PART_UPLOAD_RETRY_MINUTES: ${{ secrets.PART_UPLOAD_RETRY_MINUTES }}
       SOCIAL_ACCOUNT_NAME: memorimisteri
 
-      STORY_API_KEY: ${{ secrets.DINOIKI_API_KEY || secrets.STORY_API_KEY || secrets.OPENAI_API_KEY }}
-      STORY_BASE_URL: ${{ secrets.STORY_BASE_URL || 'https://ai.dinoiki.com/v1' }}
-      STORY_MODELS: ${{ secrets.STORY_MODELS || secrets.STORY_MODEL || 'gpt-5.4,gpt-5.3-chat,gpt-4.1' }}
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
       OPENAI_BASE_URL: ${{ secrets.OPENAI_BASE_URL }}
-      STORY_MODEL: ${{ secrets.STORY_MODEL }}
-      IMAGE_MODEL: ${{ secrets.IMAGE_MODEL }}
-      IMAGE_SIZE: ${{ secrets.IMAGE_SIZE }}
-      IMAGE_QUALITY: ${{ secrets.IMAGE_QUALITY }}
-      OPENAI_TTS_MODEL: ${{ secrets.OPENAI_TTS_MODEL }}
-      OPENAI_TTS_VOICE: ${{ secrets.OPENAI_TTS_VOICE }}
+      OPENAI_STORY_MODEL: ${{ secrets.OPENAI_STORY_MODEL || 'gpt-4.1-mini' }}
+      IMAGE_MODEL: ${{ secrets.IMAGE_MODEL || 'gpt-image-1-mini' }}
+      IMAGE_SIZE: ${{ secrets.IMAGE_SIZE || '1024x1536' }}
+      IMAGE_QUALITY: ${{ secrets.IMAGE_QUALITY || 'low' }}
+      OPENAI_TTS_MODEL: ${{ secrets.OPENAI_TTS_MODEL || 'gpt-4o-mini-tts' }}
+      OPENAI_TTS_VOICE: ${{ secrets.OPENAI_TTS_VOICE || 'shimmer' }}
       OPENAI_TTS_MALE_VOICES: ${{ secrets.OPENAI_TTS_MALE_VOICES || 'onyx,echo,verse,alloy' }}
       OPENAI_TTS_FEMALE_VOICES: ${{ secrets.OPENAI_TTS_FEMALE_VOICES || 'nova,shimmer,coral,sage' }}
-      OPENAI_TRANSCRIBE_MODEL: ${{ secrets.OPENAI_TRANSCRIBE_MODEL }}
+      OPENAI_TRANSCRIBE_MODEL: ${{ secrets.OPENAI_TRANSCRIBE_MODEL || 'whisper-1' }}
       ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
       ELEVENLABS_MODEL: ${{ secrets.ELEVENLABS_MODEL }}
       ELEVENLABS_VOICE_ID: ${{ secrets.ELEVENLABS_VOICE_ID }}
@@ -164,8 +161,8 @@ jobs:
             echo "force_part_number=${MISTIS_FORCE_PART_NUMBER:-next}"
             echo "reset_episode_state=${MISTIS_RESET_EPISODE_STATE:-false}"
             echo "story_idea_configured=$([ -n "$MISTIS_IDEA" ] && echo yes || echo no)"
-            echo "story_provider_base=$([ -n "$STORY_BASE_URL" ] && echo "$STORY_BASE_URL" || echo default)"
-            echo "story_models=$([ -n "$STORY_MODELS" ] && echo "$STORY_MODELS" || echo default)"
+            echo "story_provider_base=$([ -n "$OPENAI_BASE_URL" ] && echo "$OPENAI_BASE_URL" || echo https://api.openai.com/v1)"
+            echo "story_model=${OPENAI_STORY_MODEL:-gpt-4.1-mini}"
             echo "season_title_configured=$([ -n "$MISTIS_SEASON_TITLE" ] && echo yes || echo no)"
             echo "theme=${MISTIS_THEME:-auto}"
             echo "duration=${MISTIS_DURATION:-auto}"

@@ -35,25 +35,10 @@ function listEnv(value) {
   return clean(value).split(",").map((item) => clean(item)).filter(Boolean);
 }
 
-const storyApiKey = process.env.STORY_API_KEY || process.env.DINOIKI_API_KEY || process.env.OPENAI_API_KEY || "";
-const hasCustomStoryProvider = Boolean(
-  process.env.STORY_API_KEY ||
-  process.env.DINOIKI_API_KEY ||
-  process.env.STORY_BASE_URL ||
-  process.env.DINOIKI_BASE_URL
-);
-const storyBaseUrl = clean(
-  process.env.STORY_BASE_URL ||
-  process.env.DINOIKI_BASE_URL ||
-  (hasCustomStoryProvider ? "https://ai.dinoiki.com" : process.env.OPENAI_BASE_URL || "https://api.openai.com/v1")
-).replace(/\/+$/g, "");
-const storyModels = listEnv(
-  process.env.STORY_MODELS ||
-  process.env.DINOIKI_STORY_MODELS ||
-  process.env.STORY_MODEL ||
-  process.env.DINOIKI_STORY_MODEL ||
-  (hasCustomStoryProvider ? "gpt-5.4,gpt-5.3-chat,gpt-4.1" : "gpt-4.1-mini")
-);
+const openAiBaseUrl = clean(process.env.OPENAI_BASE_URL || "https://api.openai.com/v1").replace(/\/+$/g, "");
+const storyApiKey = process.env.OPENAI_API_KEY || "";
+const storyBaseUrl = openAiBaseUrl;
+const storyModels = listEnv(process.env.OPENAI_STORY_MODEL || "gpt-4.1-mini");
 
 export const paths = {
   rootDir,
@@ -83,11 +68,11 @@ export const config = {
     model: storyModels[0] || "gpt-4.1-mini",
     models: storyModels.length ? storyModels : ["gpt-4.1-mini"],
     maxCompletionTokens: Math.max(500, Math.floor(numberEnv("STORY_MAX_COMPLETION_TOKENS", 12000))),
-    provider: storyBaseUrl.includes("dinoiki") ? "dinoiki" : hasCustomStoryProvider ? "custom" : "openai"
+    provider: "openai"
   },
   openai: {
     apiKey: process.env.OPENAI_API_KEY || "",
-    baseUrl: clean(process.env.OPENAI_BASE_URL || "https://api.openai.com/v1").replace(/\/+$/g, ""),
+    baseUrl: openAiBaseUrl,
     imageModel: clean(process.env.IMAGE_MODEL || "gpt-image-1-mini"),
     imageSize: clean(process.env.IMAGE_SIZE || "1024x1536"),
     imageQuality: clean(process.env.IMAGE_QUALITY || "low"),

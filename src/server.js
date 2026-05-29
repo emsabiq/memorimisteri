@@ -514,7 +514,7 @@ function safePromptForScene(story, scene) {
 
 async function ensureStoryAudioOld(story, options = {}) {
   const warnings = options.warnings || [];
-  const requested = String(options.provider || story.input?.ttsProvider || (config.elevenlabs.apiKey ? "elevenlabs" : "openai")).toLowerCase();
+  const requested = String(options.provider || story.input?.ttsProvider || "openai").toLowerCase();
   const provider = requested === "elevenlabs" ? "elevenlabs" : "openai";
   if (story.assets.audio?.path && !options.force && String(story.assets.audio.provider || "openai").toLowerCase() === provider) return;
   try {

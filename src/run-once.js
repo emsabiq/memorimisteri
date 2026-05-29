@@ -219,10 +219,10 @@ function findActiveEpisode(stories) {
           base.plan?.season?.arcSummary || base.plan?.episode?.arcSummary || base.plan?.logline,
           base.plan?.ending ? `Cliffhanger terakhir: ${base.plan.ending}` : ""
         ].filter(Boolean).join(". ") || base.input?.idea,
-        protagonistName: base.input?.protagonistName || "Aku",
+        protagonistName: base.input?.protagonistName || "Saya",
         protagonistProfile: base.input?.protagonistProfile || "",
         theme: base.input?.theme || "rumah",
-        tone: base.input?.tone || "seram pelan, natural, seperti cerita pengalaman pribadi follower Memorimisteri",
+        tone: base.input?.tone || "seram pelan, formal sedang, seperti cerita pengalaman pribadi follower Memorimisteri",
         durationSec: base.input?.durationSec || 85,
         sceneCount: base.input?.sceneCount || 9,
         ttsStyle: base.input?.ttsStyle || ""
@@ -243,7 +243,7 @@ function randomEpisodeSeed(stories) {
     { theme: "rumah", place: "villa kosong dekat hutan pinus yang masih menyimpan pesan suara penyewa sebelumnya", fear: "rekaman HP yang memutar suara narator sendiri" },
     { theme: "jalan", place: "warung tutup di pinggir sawah yang menerima pesanan dari nomor tidak dikenal", fear: "lampu jalan yang padam berurutan ke arah narator" }
   ];
-  const styles = ["bisik tegang", "tenang menahan takut", "voice note tengah malam", "narator pelan sinematik", "cemas tapi jelas"];
+  const styles = ["narator formal pelan", "tenang menahan takut", "bercerita rapi", "sinematik jelas", "cemas tapi tertata"];
   const index = stories.length + new Date().getDate();
   const protagonistName = names[index % names.length];
   const seed = seeds[index % seeds.length];

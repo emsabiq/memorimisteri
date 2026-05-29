@@ -5,14 +5,14 @@ import { clamp, cleanText, createId, nowIso } from "./util.js";
 
 const transitions = ["fade gelap cepat", "zoom pelan", "flash putih singkat", "glitch halus", "cut hening"];
 const narrationStyleRules = [
-  "Narasi harus terasa seperti orang Indonesia sedang live story telling atau mengirim voice note tengah malam, bukan bahasa laporan.",
-  "Default pakai sudut pandang aku kalau ide cocok. Narator boleh terdengar ragu, menahan napas, mencoba menenangkan diri, lalu makin takut.",
-  "Gunakan kalimat pendek, tegang, dan visual. Sisipkan jeda natural lewat koma, titik, atau elipsis secukupnya.",
-  "Walaupun output dibagi per scene, tulis narration sebagai satu monolog sambung. Scene berikutnya harus terasa melanjutkan kalimat atau rasa dari scene sebelumnya, bukan mulai cerita baru.",
-  "Pakai bahasa sehari-hari yang tetap rapi: 'waktu itu', 'aku kira', 'jujur', 'anehnya', 'di situ aku mulai ngerasa'. Jangan terlalu gaul.",
-  "Jangan mengawali semua scene dengan 'aku'. Variasikan dengan 'waktu itu', 'setelah beberapa detik', 'yang bikin aku diam', 'anehnya', atau langsung lanjut ke kejadian.",
-  "Jangan terlalu sering menyebut nama tokoh. Kalau sudah pakai aku, lanjutkan sebagai aku sampai selesai.",
-  "Hindari kata-kata kaku seperti 'terdapat', 'melakukan observasi', 'memasuki area', 'terlihat jelas'. Pakai bahasa sehari-hari yang tetap sinematik.",
+  "Narasi harus memakai Bahasa Indonesia formal sedang: rapi, jelas, tetap bercerita, bukan bahasa laporan dan bukan bahasa chat.",
+  "Default pakai sudut pandang saya kalau ide cocok. Narator boleh terdengar ragu dan takut, tetapi kalimatnya tetap tertata.",
+  "Gunakan kalimat pendek sampai sedang, tegang, dan visual. Sisipkan jeda natural lewat koma atau titik secukupnya.",
+  "Walaupun output dibagi per scene, tulis narration sebagai satu monolog sambung. Scene berikutnya harus terasa melanjutkan peristiwa sebelumnya, bukan mulai cerita baru.",
+  "Pakai gaya cerita yang mudah dipahami: 'malam itu', 'saya kira', 'anehnya', 'di sana saya mulai sadar'. Jangan memakai slang berlebihan.",
+  "Jangan mengawali semua scene dengan 'saya'. Variasikan dengan 'malam itu', 'setelah beberapa detik', 'yang membuat saya terdiam', 'anehnya', atau langsung lanjut ke kejadian.",
+  "Jangan terlalu sering menyebut nama tokoh. Kalau sudah pakai saya, lanjutkan sebagai saya sampai selesai.",
+  "Hindari istilah yang membingungkan atau terlalu teknis. Pakai bahasa formal sedang yang tetap sinematik.",
   "Hindari kalimat sinopsis seperti 'Andi mulai menyelidiki' atau 'misteri semakin dalam'. Ubah menjadi kejadian langsung yang sedang dialami.",
   "Jangan pernah membacakan biodata, umur, ciri fisik, atau outfit tokoh di narration. Cukup sebut aksi dan tempat, misalnya: 'Andi berdiri di depan pintu tua.'",
   "Bangun rasa takut dari hal kecil yang manusiawi: suara sandal di tanah, layar HP yang meredup, bau tanah basah, jendela bergerak, napas yang tiba-tiba terdengar bukan milik narator.",
@@ -61,13 +61,13 @@ const fallbackTemplates = [
     ending: "Saat rekamannya diputar ulang, suara yang bernyanyi justru memakai suaraku.",
     screens: ["Sumur tua", "Lagu pelan", "HP merekam", "Jendela bergerak", "Nama dipanggil", "Suara sendiri", "Tutup sumur", "Masih bernyanyi"],
     beats: [
-      "Aku cuma diminta menjaga rumah kosong dekat sawah sampai pembelinya datang besok pagi.",
+      "Saya hanya diminta menjaga rumah kosong dekat sawah sampai pembelinya datang besok pagi.",
       "Menjelang tengah malam, dari sumur belakang terdengar perempuan menyanyi pelan, seperti menenangkan anak kecil.",
-      "Aku merekamnya dengan HP, tapi layar kamera menangkap bayangan berdiri di jendela ruang tamu.",
-      "Saat aku mendekat, nyanyian itu berhenti dan diganti suara ketukan dari dasar sumur.",
-      "Notifikasi rekaman muncul sendiri, padahal aku belum menekan tombol selesai.",
+      "Saya merekamnya dengan HP, tetapi layar kamera menangkap bayangan berdiri di jendela ruang tamu.",
+      "Saat saya mendekat, nyanyian itu berhenti dan diganti suara ketukan dari dasar sumur.",
+      "Notifikasi rekaman muncul sendiri, padahal saya belum menekan tombol selesai.",
       "Di file itu, ada suaraku berbisik minta dibukakan dari bawah tanah.",
-      "Aku lari ke pagar depan, tapi pintunya terkunci dari luar dengan rantai yang belum ada sebelumnya.",
+      "Saya berlari ke pagar depan, tetapi pintunya terkunci dari luar dengan rantai yang belum ada sebelumnya.",
       "Pagi harinya, tetangga bilang sumur itu ditutup setelah ada penjaga terakhir yang hilang tanpa jejak."
     ]
   },
@@ -79,12 +79,12 @@ const fallbackTemplates = [
     ending: "Di kaca spion, kursi belakang penuh orang basah yang menatapku tanpa berkedip.",
     screens: ["Angkot kosong", "Penumpang naik", "Alamat hilang", "Spion buram", "Uang basah", "Jalan memutar", "Kursi penuh", "Jangan berhenti"],
     beats: [
-      "Malam itu aku mengambil satu putaran terakhir karena setoran masih kurang sedikit.",
+      "Malam itu saya mengambil satu putaran terakhir karena setoran masih kurang sedikit.",
       "Di halte sepi, seorang perempuan berkerudung naik tanpa suara dan duduk paling belakang.",
-      "Dia menyebut alamat yang terasa familiar, tapi begitu kubuka peta, jalan itu tidak pernah ada.",
+      "Dia menyebut alamat yang terasa familiar, tetapi begitu saya membuka peta, jalan itu tidak pernah ada.",
       "Kaca spion mendadak berembun dari dalam, membentuk tulisan pendek: jangan turunkan dia.",
       "Saat membayar, uangnya basah dan berbau tanah setelah hujan.",
-      "Aku mencoba berbelok ke jalan besar, tapi angkot selalu kembali ke halte yang sama.",
+      "Saya mencoba berbelok ke jalan besar, tetapi angkot selalu kembali ke halte yang sama.",
       "Di kursi belakang, bukan cuma dia yang duduk. Ada lima bayangan lain menunduk menunggu giliran.",
       "Satu suara tepat di belakang telingaku berbisik, malam ini sopirnya ikut turun."
     ]
@@ -93,17 +93,17 @@ const fallbackTemplates = [
     title: "Kamar Nomor Tiga Belas",
     theme: "kos",
     logline: "Penghuni baru kos murah menemukan pintu kamar yang tidak pernah tercatat di denah bangunan.",
-    hook: "Pemilik kos bilang tidak ada kamar nomor tiga belas. Tapi kuncinya ada di sakuku.",
+    hook: "Pemilik kos bilang tidak ada kamar nomor tiga belas. Tetapi kuncinya ada di saku saya.",
     ending: "Di balik pintu itu, ada kasur rapi dengan namaku tertulis di papan penghuni lama.",
-    screens: ["Kunci asing", "Nomor 13", "Lorong sepi", "Lampu mati", "Denah hilang", "Nama lama", "Pintu membuka", "Aku sudah tinggal"],
+    screens: ["Kunci asing", "Nomor 13", "Lorong sepi", "Lampu mati", "Denah hilang", "Nama lama", "Pintu membuka", "Saya sudah tinggal"],
     beats: [
-      "Aku pindah ke kos murah di ujung gang karena cuma tempat itu yang bisa dibayar mingguan.",
-      "Di gantungan kunci, ada satu kunci kecil bertuliskan tiga belas, padahal kamarku nomor tujuh.",
-      "Setiap malam, lorong sebelah dapur memanjang sendiri sampai muncul pintu yang tidak kulihat saat siang.",
-      "Dari dalam pintu itu terdengar suara orang mengetik pesan dengan nada yang sama seperti HP-ku.",
+      "Saya pindah ke kos murah di ujung gang karena hanya tempat itu yang bisa dibayar mingguan.",
+      "Di gantungan kunci, ada satu kunci kecil bertuliskan tiga belas, padahal kamar saya nomor tujuh.",
+      "Setiap malam, lorong sebelah dapur memanjang sendiri sampai muncul pintu yang tidak saya lihat saat siang.",
+      "Dari dalam pintu itu terdengar suara orang mengetik pesan dengan nada yang sama seperti HP saya.",
       "Pemilik kos bersumpah bangunan itu cuma punya dua belas kamar sejak awal dibangun.",
-      "Saat kubuka denah lama, nomor tiga belas dicoret tebal dan di sampingnya tertulis jangan disewakan lagi.",
-      "Aku memberanikan diri membuka pintu, dan bau kamarku sendiri langsung keluar dari sana.",
+      "Saat saya membuka denah lama, nomor tiga belas dicoret tebal dan di sampingnya tertulis jangan disewakan lagi.",
+      "Saya memberanikan diri membuka pintu, dan bau kamar saya sendiri langsung keluar dari sana.",
       "Di meja kamar itu, ada buku catatan berisi semua hal yang akan kulakukan besok pagi."
     ]
   },
@@ -112,17 +112,17 @@ const fallbackTemplates = [
     theme: "rumah",
     logline: "Cermin tua di kontrakan murah menampilkan ruangan yang sama, tetapi penghuninya bergerak lebih dulu.",
     hook: "Bayanganku di cermin selalu terlambat satu detik, sampai malam ketika dia bergerak duluan.",
-    ending: "Besok paginya aku bangun di sisi dalam cermin, melihat tubuhku tersenyum di kamar.",
+    ending: "Besok paginya saya bangun di sisi dalam cermin, melihat tubuh saya tersenyum di kamar.",
     screens: ["Cermin tua", "Gerak terlambat", "Lampu padam", "Bayangan senyum", "Pintu terkunci", "Tangan keluar", "Tukar tempat", "Sisi dalam"],
     beats: [
-      "Kontrakan itu murah karena bekas gudang pasar, tapi aku tidak punya pilihan lain.",
+      "Kontrakan itu murah karena bekas gudang pasar, tetapi saya tidak punya pilihan lain.",
       "Di kamar belakang ada cermin tinggi yang tidak bisa dilepas meski semua bautnya sudah karatan.",
-      "Awalnya bayanganku cuma terlambat satu detik setiap kali aku bergerak.",
-      "Malam ketiga, bayangan itu tersenyum lebih dulu sebelum aku merasa ingin tersenyum.",
-      "Aku menutup cermin dengan kain, tapi dari balik kain terdengar ketukan pelan seperti kuku menyentuh kaca.",
+      "Awalnya bayangan saya hanya terlambat satu detik setiap kali saya bergerak.",
+      "Malam ketiga, bayangan itu tersenyum lebih dulu sebelum saya merasa ingin tersenyum.",
+      "Saya menutup cermin dengan kain, tetapi dari balik kain terdengar ketukan pelan seperti kuku menyentuh kaca.",
       "Saat listrik padam, sebuah tangan menekan permukaan cermin dari sisi seberang.",
-      "Aku mundur ke pintu, tapi kunci kamar sudah berada di tangan bayanganku.",
-      "Terakhir yang kuingat, kaca itu terasa seperti air dingin menelan wajahku."
+      "Saya mundur ke pintu, tetapi kunci kamar sudah berada di tangan bayangan saya.",
+      "Terakhir yang saya ingat, kaca itu terasa seperti air dingin menelan wajah saya."
     ]
   },
   {
@@ -135,11 +135,11 @@ const fallbackTemplates = [
     beats: [
       "Kabut turun lebih cepat dari perkiraan ketika kami hampir sampai pos tiga.",
       "Dari arah jurang, terdengar peluit tiga kali, jeda, lalu tiga kali lagi.",
-      "Temanku bilang itu kode pendaki tersesat, jadi kami mengikuti suara itu dengan senter kecil.",
+      "Teman saya bilang itu kode pendaki tersesat, jadi kami mengikuti suara itu dengan senter kecil.",
       "Jejak kaki di tanah basah mengarah ke tenda abu-abu yang tidak ada saat kami lewat sore tadi.",
       "Di dalam tenda, ada daftar nama rombongan kami lengkap dengan jam kematian masing-masing.",
       "Api kompor mendadak mati, dan peluit itu terdengar lagi dari dalam tas salah satu teman.",
-      "Ketika kami berlari kembali ke jalur, jumlah suara langkah di belakangku berkurang satu.",
+      "Ketika kami berlari kembali ke jalur, jumlah suara langkah di belakang saya berkurang satu.",
       "Pagi hari, tim SAR menemukan tenda kami kosong, kecuali satu pasang sepatu baru yang masih hangat."
     ]
   },
@@ -148,15 +148,15 @@ const fallbackTemplates = [
     theme: "mimpi",
     logline: "Pesan suara dari nomor almarhum ibu mengarahkan seorang anak ke kamar yang selama ini dilarang dibuka.",
     hook: "Nomor ibu masuk lagi setelah tujuh hari wafat, dan pesannya cuma satu: jangan tidur di rumah itu.",
-    ending: "Di pesan terakhir, suara ibu berbisik bahwa yang sedang kupeluk sejak pemakaman bukan ayahku.",
+    ending: "Di pesan terakhir, suara ibu berbisik bahwa yang sedang saya peluk sejak pemakaman bukan ayah saya.",
     screens: ["Nomor ibu", "Pesan suara", "Kamar terkunci", "Foto jatuh", "Bau melati", "Sosok ayah", "Jangan tidur", "Bukan ayah"],
     beats: [
-      "Aku pulang ke rumah setelah tujuh hari pemakaman ibu, berniat menemani ayah yang tinggal sendiri.",
+      "Saya pulang ke rumah setelah tujuh hari pemakaman ibu, berniat menemani ayah yang tinggal sendiri.",
       "Pukul satu malam, nomor ibu mengirim pesan suara baru, padahal HP-nya masih kusimpan di laci.",
       "Suaranya pelan dan pecah, menyuruhku jangan tidur di kamar depan.",
       "Saat pesan kedua masuk, foto keluarga di dinding jatuh tepat di depan pintu kamar yang selalu dikunci.",
       "Dari celah pintu, tercium bau melati bercampur tanah basah.",
-      "Ayah berdiri di ujung lorong tanpa berkedip, lalu bertanya dengan suara datar kenapa aku belum tidur.",
+      "Ayah berdiri di ujung lorong tanpa berkedip, lalu bertanya dengan suara datar kenapa saya belum tidur.",
       "Pesan ketiga masuk saat dia memegang bahuku, dan kali ini suara ibu terdengar panik.",
       "Ibu berbisik, jangan percaya wajahnya, ayahmu belum pulang dari kuburan."
     ]
@@ -233,7 +233,7 @@ function normalizeInput(input) {
     protagonistName: cleanText(input.protagonistName || "Andi", 40),
     protagonistProfile: cleanText(input.protagonistProfile || defaultCharacter, 360),
     theme: cleanText(input.theme || "kos", 40),
-    tone: cleanText(input.tone || "seram pelan, natural, seperti cerita pengalaman pribadi yang makin lama makin tidak beres", 140),
+    tone: cleanText(input.tone || "seram pelan, formal sedang, bercerita rapi, mudah dipahami, dan makin lama terasa tidak beres", 140),
     durationSec,
     sceneCount,
     totalParts,
@@ -314,8 +314,8 @@ function buildPrompt(input, memory) {
   return [
     "Buat rencana 1 video short sebagai 1 Episode dari 1 Season cerita mistis vertikal bahasa Indonesia.",
     "Konten harus original, cinematic, tidak gore, tidak memakai figur publik nyata, dan cocok untuk YouTube Shorts, Facebook Reels, Instagram Reels.",
-    "Tulis sebagai storyteller horror yang sedang menceritakan pengalaman pribadi secara live. Jangan terdengar seperti sinopsis, berita, atau instruksi produksi.",
-    "Bayangkan naratornya manusia biasa yang takut tapi mencoba tetap bicara pelan ke penonton. Narasi harus punya rasa hadir di lokasi.",
+    "Tulis sebagai narator horror yang sedang menceritakan pengalaman pribadi dengan bahasa Indonesia formal sedang. Jangan terdengar seperti sinopsis, berita, atau instruksi produksi.",
+    "Bayangkan naratornya manusia biasa yang takut tetapi tetap bercerita dengan runtut. Narasi harus punya rasa hadir di lokasi.",
     "Cerita harus membuat penonton merasa ada sesuatu yang salah sejak awal, lalu rasa takutnya naik pelan sampai ujung episode.",
     ...narrationStyleRules,
     "Kembalikan JSON valid saja dengan shape:",
@@ -325,9 +325,9 @@ function buildPrompt(input, memory) {
     "Setiap storyboard object wajib punya beat, narration singkat, dan imagePrompt spesifik. Jangan mengisi storyboard dengan kalimat copy-paste.",
     "Setiap episode punya 8-10 storyboard/scene yang nyambung dengan episode sebelum dan sesudahnya. Scenes current episode wajib mengembangkan storyboards episode saat ini, sehingga narration dan imagePrompt scene sesuai dengan storyboard.",
     "Durasi video current episode harus 1 sampai 2 menit, dan jangan melewati durasi yang diminta.",
-    `Total narasi current episode sekitar ${words.min}-${words.max} kata agar TTS terdengar santai, punya jeda, dan tidak dipaksa dipercepat.`,
+    `Total narasi current episode sekitar ${words.min}-${words.max} kata agar TTS terdengar runtut, punya jeda, dan tidak dipaksa dipercepat.`,
     "Hook harus langsung memancing rasa penasaran, tetapi narration scene 1 tetap mulai dari kejadian, bukan promosi.",
-    "Setiap narration harus terasa seperti ucapan yang bisa direkam langsung: ada rasa spontan, tapi tetap jelas dan tidak bertele-tele.",
+    "Setiap narration harus terasa seperti cerita yang dapat dibacakan langsung: jelas, runtut, tidak bertele-tele, dan tidak memakai bahasa yang membingungkan.",
     "Bayangkan semua narration akan digabung menjadi satu audio TTS. Karena itu alurnya harus nyambung, tanpa lompatan bahasa yang terasa ditempel.",
     "Jangan tulis kalimat seperti: bersambung, akan berlanjut, lanjut di episode berikutnya, tunggu episode berikutnya, atau summary penutup. Akhiri episode dengan beat cerita natural.",
     "Setiap scene wajib punya momen visual berbeda, supaya gambar tidak kembar.",
@@ -653,8 +653,8 @@ function titleFromFocus(value) {
 function fallbackNarration(scene, input, index) {
   const focus = cleanText(scene.screenText || themeMotif(input.theme, index), 80).toLowerCase();
   const lines = [
-    `Aku mengarahkan senter ke ${focus}. Udara langsung dingin, seperti ada yang baru saja lewat di depanku.`,
-    `${focus} itu diam saja, tapi rasanya seperti sedang menunggu aku mendekat.`,
+    `Saya mengarahkan senter ke ${focus}. Udara langsung dingin, seperti ada yang baru saja lewat di depan saya.`,
+    `${focus} itu diam saja, tetapi rasanya seperti sedang menunggu saya mendekat.`,
     `${input.protagonistName} menahan napas. Dari arah ${focus}, terdengar suara kecil yang tidak mungkin berasal dari angin.`
   ];
   return lines[index % lines.length];

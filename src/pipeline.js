@@ -66,7 +66,7 @@ export async function ensureTitleThumbnail(story, options = {}) {
 
 export async function ensureStoryAudio(story, options = {}) {
   const warnings = options.warnings || [];
-  const requested = String(options.provider || story.input?.ttsProvider || (config.elevenlabs.apiKey ? "elevenlabs" : "openai")).toLowerCase();
+  const requested = String(options.provider || story.input?.ttsProvider || "openai").toLowerCase();
   const provider = requested === "elevenlabs" ? "elevenlabs" : "openai";
   if (story.assets.audio?.path && !options.force && String(story.assets.audio.provider || "openai").toLowerCase() === provider) return;
 
@@ -123,7 +123,7 @@ function pickTtsVoice(story, provider) {
 }
 
 function ttsStyleName(story) {
-  const styles = ["bisik tegang", "tenang menahan takut", "voice note tengah malam", "narator pelan sinematik", "cemas tapi jelas"];
+  const styles = ["narator formal pelan", "tenang menahan takut", "bercerita rapi", "sinematik jelas", "cemas tapi tertata"];
   return styles[Math.abs(hash(story.plan?.season?.title || story.plan?.episode?.title || story.title || story.id)) % styles.length];
 }
 
@@ -132,9 +132,9 @@ function ttsInstructions(story) {
   return [
     "Bacakan sepenuhnya dalam Bahasa Indonesia dengan pelafalan Indonesia natural.",
     `Gaya suara: ${style}.`,
-    "Terdengar seperti orang Indonesia sedang menceritakan pengalaman mistis sungguhan di ruangan gelap.",
-    "Tempo santai dan menahan takut, jangan terlalu cepat.",
-    "Baca sebagai satu cerita sambung, bukan potongan scene. Pakai napas natural, jeda tegang, jelas, tidak berlebihan, dan bukan gaya iklan."
+    "Terdengar seperti narator Indonesia sedang menceritakan pengalaman mistis dengan bahasa formal sedang yang mudah dipahami.",
+    "Tempo tenang dan menahan takut, jangan terlalu cepat.",
+    "Baca sebagai satu cerita sambung, bukan potongan scene. Pakai napas natural, jeda tegang, jelas, rapi, tidak berlebihan, dan bukan gaya iklan."
   ].join(" ");
 }
 

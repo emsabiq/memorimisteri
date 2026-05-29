@@ -80,7 +80,7 @@ export async function generateSpeech({ storyId, text, voice, instructions, filen
       model: config.openai.ttsModel,
       voice: voice || config.openai.ttsVoice,
       input: text,
-      instructions: instructions || "Bacakan sepenuhnya dalam Bahasa Indonesia dengan pelafalan Indonesia natural. Suaranya dekat, pelan, dan tegang, seperti orang Indonesia sedang live story telling pengalaman mistis sungguhan kepada teman di ruangan gelap. Jangan terdengar membaca potongan scene; baca sebagai satu cerita sambung dengan napas natural, sedikit ragu di bagian menakutkan, dan bisikkan kalimat yang terasa paling dekat. Tetap jelas, tidak berlebihan, dan bukan gaya iklan.",
+      instructions: instructions || "Bacakan sepenuhnya dalam Bahasa Indonesia dengan pelafalan Indonesia natural. Suaranya pelan, tegang, dan rapi, seperti narator Indonesia sedang menceritakan pengalaman mistis dengan bahasa formal sedang. Jangan terdengar membaca potongan scene; baca sebagai satu cerita sambung dengan napas natural dan jeda tegang. Tetap jelas, tidak membingungkan, tidak berlebihan, dan bukan gaya iklan.",
       response_format: "mp3"
     })
   });
@@ -179,7 +179,7 @@ function assertOpenAi() {
 }
 
 function assertStoryProvider() {
-  if (!config.story.apiKey) throw new Error("STORY_API_KEY atau DINOIKI_API_KEY belum diisi.");
+  if (!config.story.apiKey) throw new Error("OPENAI_API_KEY belum diisi untuk membuat cerita.");
 }
 
 function headersJson() {
@@ -211,7 +211,7 @@ function storyPayload({ promptText, model, strictJson }) {
     messages: [
       {
         role: "system",
-        content: "You are an Indonesian horror short-form video writer. Write first-person, live storytelling narration that sounds like a real Indonesian person quietly telling a frightening experience, cinematic but not stiff. Return valid JSON only."
+        content: "You are an Indonesian horror short-form video writer. Write first-person narration in clear medium-formal Indonesian, cinematic and easy to understand, like a narrator telling a frightening personal experience in an orderly way. Return valid JSON only."
       },
       { role: "user", content: promptText }
     ],
