@@ -182,10 +182,15 @@ async function generateImageWithRetry({ story, scene, size, quality }) {
 
 function safePromptForScene(story, scene) {
   const character = story.input?.protagonistProfile || "tokoh utama Indonesia membawa HP dan senter kecil";
+  const sceneText = `${story.input?.idea || ""} ${story.input?.seasonTitle || ""} ${story.input?.episodeTitle || ""} ${scene.screenText || ""} ${scene.narration || ""} ${scene.imagePrompt || ""}`;
+  const allowsWell = /\bsumur\b/i.test(`${story.input?.idea || ""} ${story.input?.seasonTitle || ""} ${story.input?.episodeTitle || ""}`);
   return [
-    "atmospheric Indonesian horror insert shot, no visible full person, focus on location, object clue, light, shadow, door, window, well surface, or phone glow",
+    "atmospheric Indonesian horror insert shot, no visible full person, focus on the exact location, object clue, light, shadow, door, window, phone glow, or scene-specific prop",
     `if a protagonist is absolutely required, use only a distant safe silhouette with continuity: ${character}`,
     `scene mood: ${scene.screenText || story.title}`,
+    allowsWell && /\bsumur\b/i.test(sceneText)
+      ? "old well may appear only when it is the explicit scene object, with no person inside it"
+      : "use only the requested location and props; avoid unrelated circular stone structures, water pits, or extra background objects",
     "dark but readable blue-green night lighting, cinematic vertical 9:16, no text, no logo, no gore, no injury, no trapped person, no drowning, no fall"
   ].join(", ");
 }

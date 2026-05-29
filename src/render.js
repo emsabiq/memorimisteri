@@ -17,6 +17,7 @@ const endCardDuration = 2.4;
 const jumpScareDuration = Number.isFinite(Number(process.env.JUMPSCARE_SECONDS))
   ? clamp(Number(process.env.JUMPSCARE_SECONDS), 0.45, 1.25)
   : 0.78;
+const middleSfxDuration = 1.65;
 const introFreezeDuration = Number.isFinite(Number(process.env.INTRO_FREEZE_SECONDS))
   ? clamp(Number(process.env.INTRO_FREEZE_SECONDS), 0.3, 2)
   : 0.8;
@@ -430,9 +431,9 @@ function segmentTextOverlays({ scene, regularFont, italicFont, partTextFile, tit
   }
 
   return [
-    "drawbox=x=0:y=0:w=iw:h=375:color=black@0.5:t=fill",
-    `drawtext=fontfile='${italicFont}':textfile='${partTextFile}':x=64:y=88:fontsize=40:fontcolor=0xe2c483:line_spacing=8:borderw=1:bordercolor=black@0.85`,
-    `drawtext=fontfile='${regularFont}':textfile='${titleTextFile}':x=64:y=166:fontsize=${scene.index === 1 ? 78 : 68}:fontcolor=0xf7f1e5:line_spacing=13:borderw=4:bordercolor=black@0.92`
+    "drawbox=x=0:y=0:w=iw:h=430:color=black@0.5:t=fill",
+    `drawtext=fontfile='${italicFont}':textfile='${partTextFile}':x=64:y=126:fontsize=40:fontcolor=0xe2c483:line_spacing=8:borderw=1:bordercolor=black@0.85`,
+    `drawtext=fontfile='${regularFont}':textfile='${titleTextFile}':x=64:y=208:fontsize=${scene.index === 1 ? 78 : 68}:fontcolor=0xf7f1e5:line_spacing=13:borderw=4:bordercolor=black@0.92`
   ];
 }
 
@@ -1219,7 +1220,7 @@ async function makeJumpScareSfxBed({ outputPath, duration, jumpScareAt }) {
   for (const sourcePath of selected) args.push("-i", sourcePath);
 
   const events = [
-    { input: 1 % selected.length, start: midStart, length: 1.15, volume: 0.46, highpass: 95, lowpass: 8200 },
+    { input: 1 % selected.length, start: midStart, length: middleSfxDuration, volume: 0.46, highpass: 95, lowpass: 8200 },
     { input: 0, start: endStart - 0.08, length: 1.75, volume: 0.86, highpass: 70, lowpass: 9600 },
     { input: 2 % selected.length, start: endStart + 0.16, length: 1.2, volume: 0.42, highpass: 100, lowpass: 7600 }
   ];
@@ -1267,7 +1268,7 @@ async function makeSyntheticJumpScareSfxBed({ outputPath, duration, jumpScareAt 
     "-f",
     "lavfi",
     "-t",
-    "1.2",
+    String(middleSfxDuration),
     "-i",
     "anoisesrc=color=white:amplitude=0.38:sample_rate=44100",
     "-f",
@@ -1277,7 +1278,7 @@ async function makeSyntheticJumpScareSfxBed({ outputPath, duration, jumpScareAt 
     "-i",
     "sine=frequency=880:sample_rate=44100",
     "-filter_complex",
-    `[0:a]highpass=f=500,lowpass=f=7000,volume=0.34,adelay=${midMs}:all=1[s0];[0:a]highpass=f=500,lowpass=f=7600,volume=0.62,adelay=${startMs}:all=1[s1];[1:a]volume=0.42,aecho=0.5:0.25:110:0.18,adelay=${startMs + 80}:all=1[s2];[s0][s1][s2]amix=inputs=3:duration=longest:normalize=0,alimiter=limit=0.9[a]`,
+    `[0:a]atrim=0:${middleSfxDuration.toFixed(2)},asetpts=PTS-STARTPTS,highpass=f=500,lowpass=f=7000,volume=0.34,adelay=${midMs}:all=1[s0];[0:a]atrim=0:1.20,asetpts=PTS-STARTPTS,highpass=f=500,lowpass=f=7600,volume=0.62,adelay=${startMs}:all=1[s1];[1:a]volume=0.42,aecho=0.5:0.25:110:0.18,adelay=${startMs + 80}:all=1[s2];[s0][s1][s2]amix=inputs=3:duration=longest:normalize=0,alimiter=limit=0.9[a]`,
     "-map",
     "[a]",
     "-t",

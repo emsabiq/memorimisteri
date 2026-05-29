@@ -19,7 +19,7 @@ export async function createTitleThumbnail(story) {
 
   const titlePath = path.join(workDir, "thumbnail-title.txt");
   const metaPath = path.join(workDir, "thumbnail-meta.txt");
-  await fs.writeFile(titlePath, wrapTitle(story.plan?.season?.title || story.plan?.episode?.title || story.title || "Memori Misteri"), "utf8");
+  await fs.writeFile(titlePath, wrapTitle(thumbnailTitle(story)), "utf8");
   await fs.writeFile(metaPath, thumbnailMeta(story), "utf8");
 
   const filename = `${story.id}-thumbnail-${safeFilename(story.title || "title")}.png`;
@@ -32,9 +32,9 @@ export async function createTitleThumbnail(story) {
     `crop=${width}:${height}`,
     "eq=brightness=-0.055:contrast=1.08:saturation=0.92",
     "drawbox=x=0:y=0:w=iw:h=ih:color=black@0.30:t=fill",
-    "drawbox=x=0:y=1240:w=iw:h=430:color=black@0.58:t=fill",
-    `drawtext=fontfile='${fontFile}':textfile='${metaFile}':x=76:y=1284:fontsize=46:fontcolor=0xd8efea:line_spacing=8:borderw=3:bordercolor=black@0.9`,
-    `drawtext=fontfile='${fontFile}':textfile='${titleFile}':x=76:y=1360:fontsize=88:fontcolor=0xf7f1e5:line_spacing=14:borderw=6:bordercolor=black@0.96:shadowx=0:shadowy=5:shadowcolor=black@0.72`,
+    "drawbox=x=0:y=1168:w=iw:h=560:color=black@0.60:t=fill",
+    `drawtext=fontfile='${fontFile}':textfile='${metaFile}':x=76:y=1212:fontsize=44:fontcolor=0xd8efea:line_spacing=8:borderw=3:bordercolor=black@0.9`,
+    `drawtext=fontfile='${fontFile}':textfile='${titleFile}':x=76:y=1288:fontsize=78:fontcolor=0xf7f1e5:line_spacing=12:borderw=6:bordercolor=black@0.96:shadowx=0:shadowy=5:shadowcolor=black@0.72`,
     "format=rgb24"
   ].join(",");
 
@@ -71,7 +71,16 @@ function thumbnailMeta(story) {
   return ["MEMORI MISTERI", part].join("  |  ");
 }
 
-function wrapTitle(value) {
+function thumbnailTitle(story) {
+  return story.title
+    || story.plan?.season?.episodeTitle
+    || story.plan?.episode?.partTitle
+    || story.plan?.episode?.title
+    || story.plan?.season?.title
+    || "Memori Misteri";
+}
+
+function wrapTitle(value, maxChars = 18, maxLines = 4) {
   const words = String(value || "Memori Misteri").trim().split(/\s+/).filter(Boolean);
   const lines = [];
   let line = "";
@@ -85,7 +94,10 @@ function wrapTitle(value) {
     }
   }
   if (line) lines.push(line);
-  return lines.slice(0, 3).join("\n");
+  if (lines.length <= maxLines) return lines.join("\n");
+  const trimmed = lines.slice(0, maxLines);
+  trimmed[maxLines - 1] = `${trimmed[maxLines - 1].slice(0, Math.max(1, maxChars - 3)).trim()}...`;
+  return trimmed.join("\n");
 }
 
 function ffmpegFilterPath(filePath) {

@@ -14,7 +14,7 @@ const narrationStyleRules = [
   "Jangan terlalu sering menyebut nama tokoh. Kalau sudah pakai aku, lanjutkan sebagai aku sampai selesai.",
   "Hindari kata-kata kaku seperti 'terdapat', 'melakukan observasi', 'memasuki area', 'terlihat jelas'. Pakai bahasa sehari-hari yang tetap sinematik.",
   "Hindari kalimat sinopsis seperti 'Andi mulai menyelidiki' atau 'misteri semakin dalam'. Ubah menjadi kejadian langsung yang sedang dialami.",
-  "Jangan pernah membacakan biodata, umur, ciri fisik, atau outfit tokoh di narration. Cukup sebut aksi dan tempat, misalnya: 'Andi berdiri di depan sumur tua.'",
+  "Jangan pernah membacakan biodata, umur, ciri fisik, atau outfit tokoh di narration. Cukup sebut aksi dan tempat, misalnya: 'Andi berdiri di depan pintu tua.'",
   "Bangun rasa takut dari hal kecil yang manusiawi: suara sandal di tanah, layar HP yang meredup, bau tanah basah, jendela bergerak, napas yang tiba-tiba terdengar bukan milik narator.",
   "Setiap scene narration idealnya 1-2 kalimat saja, mudah dibaca TTS, dan langsung membawa penonton ke momen berikutnya."
 ];
@@ -38,7 +38,7 @@ const defaultCharacter = "Andi, pria Indonesia 28 tahun, rambut hitam pendek sed
 
 const shotDirections = [
   "wide atmospheric establishing shot, no visible person, focus on the location, mist, light, and negative space",
-  "object detail shot, no full person, focus on the clue, phone screen, door, window, well surface, key, or moving object",
+  "object detail shot, no full person, focus on the clue, phone screen, door, window, key, or moving object",
   "POV flashlight shot, only a hand, phone, or small flashlight may appear",
   "distant silhouette or shadow shot, person optional and small in frame, atmosphere is the main subject",
   "environment threat shot, no visible face, focus on movement in the room, corridor, field, or reflection",
@@ -49,7 +49,7 @@ const visualVarietyRules = [
   "Jangan membuat semua scene berpusat pada satu objek atau satu lokasi kecil saja. Maksimal 2 scene boleh memakai objek utama yang sama.",
   "Current episode harus punya minimal 5 anchor visual berbeda: establishing lokasi, benda petunjuk close-up, POV/layar HP, ruang atau jalan berbeda, pantulan/bayangan, dan cliffhanger akhir.",
   "ImagePrompt tiap scene wajib menyebut aksi visual, lokasi spesifik, dan komposisi kamera yang berbeda. Jangan hanya mengganti caption di gambar yang sama.",
-  "Kalau ide tidak menyebut sumur, jangan menambahkan sumur. Pilih objek horor yang sesuai ide: angkot, kaca spion, pintu kos, HP, tenda, jendela, cermin, sandal basah, atau lampu jalan."
+  "Kalau ide atau judul season tidak menyebut sumur, jangan menambahkan sumur. Pilih objek horor yang sesuai ide: angkot, kaca spion, pintu kos, HP, tenda, jendela, cermin, sandal basah, atau lampu jalan."
 ];
 
 const fallbackTemplates = [
@@ -227,7 +227,7 @@ function normalizeInput(input) {
   const partNumber = clamp(Number(input.partNumber || 1), 1, totalParts);
   const seasonTitle = cleanText(input.seasonTitle || input.episodeTitle || "", 100);
   return {
-    idea: cleanText(input.idea || "Di rumah kosong dekat sawah, ada suara perempuan menyanyi dari sumur tua setiap malam Jumat.", 1200),
+    idea: cleanText(input.idea || "Di kos tua ujung gang, pintu kamar bernomor aneh muncul setiap lewat tengah malam.", 1200),
     seasonTitle,
     episodeTitle: seasonTitle,
     protagonistName: cleanText(input.protagonistName || "Andi", 40),
@@ -335,11 +335,15 @@ function buildPrompt(input, memory) {
     "ScreenText harus pendek, seperti judul beat visual, bukan kalimat panjang.",
     `Detail tokoh utama hanya untuk kontinuitas visual di imagePrompt saat skrip benar-benar butuh orang: ${input.protagonistProfile}.`,
     "Detail tokoh seperti umur, rambut, wajah, jaket, kaos, celana, sepatu, HP, dan senter tidak boleh muncul di narration, hook, logline, ending, screenText, atau season outline.",
-    `Kalau narration menyebut tokoh, pakai gaya natural seperti: '${input.protagonistName} berada di depan sumur tua' atau '${input.protagonistName} menahan napas di lorong gelap'.`,
-    "Visual harus mengikuti skrip, bukan memaksa tokoh muncul. Kalau adegan berupa suara, benda, lorong, sumur, pintu, HP, sawah, refleksi, atau bayangan, imagePrompt harus berupa POV/objek/suasana tanpa wajah dan tanpa badan penuh.",
+    `Kalau narration menyebut tokoh, pakai gaya natural seperti: '${input.protagonistName} berdiri di depan pintu tua' atau '${input.protagonistName} menahan napas di lorong gelap'.`,
+    inputAllowsWell(input)
+      ? "Visual harus mengikuti skrip, bukan memaksa tokoh muncul. Kalau adegan berupa suara, benda, lorong, sumur, pintu, HP, sawah, refleksi, atau bayangan, imagePrompt harus berupa POV/objek/suasana tanpa wajah dan tanpa badan penuh."
+      : "Visual harus mengikuti skrip, bukan memaksa tokoh muncul. Kalau adegan berupa suara, benda, lorong, pintu, HP, sawah, refleksi, atau bayangan, imagePrompt harus berupa POV/objek/suasana tanpa wajah dan tanpa badan penuh.",
     "Jangan menambahkan sosok manusia, hantu berbentuk manusia, atau figur orang tambahan kecuali skrip eksplisit menyebut ada sosok terlihat. Kalau ada orang terlihat, gunakan hanya karakter yang disebut dalam skrip.",
     "Untuk video 8 scene, maksimal 2 scene boleh menampilkan tokoh utama secara jelas. Sisanya harus insert shot/POV/establishing shot. Kalau tokoh utama muncul, imagePrompt wajib menyebut nama, umur, outfit, smartphone, dan senter kecil yang sama.",
-    "Untuk adegan sumur: tampilkan sosok di samping/dekat sumur atau refleksi aman di air; jangan tampilkan orang jatuh, tubuh terjebak, tenggelam, atau berada di dalam sumur.",
+    inputAllowsWell(input)
+      ? "Untuk adegan sumur: tampilkan sosok di samping/dekat sumur atau refleksi aman di air; jangan tampilkan orang jatuh, tubuh terjebak, tenggelam, atau berada di dalam sumur."
+      : "This idea does not request a well. Do not add any old well, water well, circular stone well, or well-like object to narration, screenText, storyboards, or imagePrompt.",
     `Ide: ${input.idea}`,
     `Judul Season opsional: ${input.seasonTitle || "buatkan judul Season yang kuat"}`,
     `Tema: ${input.theme}`,
@@ -416,13 +420,14 @@ function normalizePlan(plan, input, memory) {
 
 function normalizeScene(scene, index, input, options = {}) {
   const durationSec = clamp(Number(scene.durationSec || Math.round(input.durationSec / input.sceneCount)), 3, 15);
-  const screenText = normalizeScreenText(scene.screenText, scene, input, index);
+  const screenText = removeUnrequestedWellText(normalizeScreenText(scene.screenText, scene, input, index), input, index, 64);
+  const promptSource = removeUnrequestedWellText([screenText, scene.narration, scene.imagePrompt].filter(Boolean).join(" "), input, index, 900);
   return {
     index: index + 1,
     durationSec,
     narration: sanitizeNarrationForSpeech(stripContinuationLanguage(cleanText(scene.narration || fallbackNarration(scene, input, index), 700)), input),
     screenText,
-    imagePrompt: enhancePrompt([screenText, scene.narration, scene.imagePrompt].filter(Boolean).join(" "), input, index, options),
+    imagePrompt: enhancePrompt(promptSource, input, index, options),
     transition: cleanText(scene.transition || transitions[index % transitions.length], 80),
     effect: cleanText(scene.effect || "slow zoom, subtle film grain, dark vignette", 120),
     soundDesign: cleanText(scene.soundDesign || "low drone, faint room tone", 120)
@@ -468,7 +473,7 @@ function escapeRegExp(value) {
 
 function enhancePrompt(prompt, input, index, options = {}) {
   const motif = themeMotif(input.theme, index);
-  const requestedBase = prompt || `${motif}, tense quiet horror scene`;
+  const requestedBase = removeUnrequestedWellText(prompt || `${motif}, tense quiet horror scene`, input, index, 900);
   const anchor = visualAnchor(input, requestedBase, index);
   const forceAtmospheric = !options.characterShotAllowed || avoidsVisibleCharacter(requestedBase);
   const base = forceAtmospheric
@@ -480,12 +485,15 @@ function enhancePrompt(prompt, input, index, options = {}) {
   const characterRule = forceAtmospheric
     ? "no visible protagonist, no extra human figure, no human-shaped ghost; imply the scene only through flashlight beam, phone glow, footprints, open door, abstract shadow, reflection, or object clue"
     : `character continuity: if ${input.protagonistName} appears, use this exact profile: ${input.protagonistProfile}; otherwise keep the frame atmospheric or object-focused and do not force a person into the frame`;
+  const wellRule = inputAllowsWell(input)
+    ? "if a well appears, keep any human silhouette beside the well or reflected safely on water, never inside the well"
+    : "use only the requested location and props; avoid unrelated circular stone structures, water pits, or extra background objects";
   return [
     base,
     `composition direction: ${direction}`,
     characterRule,
     `visual variety anchor for scene ${index + 1}: ${anchor}`,
-    "if a well appears, keep any human silhouette beside the well or reflected safely on water, never inside the well",
+    wellRule,
     visualPromptSuffix
   ].join(", ");
 }
@@ -618,8 +626,23 @@ function visualFocusFromScene(value, input, index) {
     ["bayangan", "bayangan samar di dinding retak"],
     ["refleksi", "refleksi samar di permukaan air"]
   ];
-  const found = motifs.find(([keyword]) => text.includes(keyword));
+  const allowWell = inputAllowsWell(input);
+  const found = motifs.find(([keyword]) => (keyword !== "sumur" || allowWell) && text.includes(keyword));
   return found?.[1] || themeMotif(input.theme, index);
+}
+
+function inputAllowsWell(input) {
+  return /\bsumur\b/i.test(`${input?.idea || ""} ${input?.seasonTitle || ""} ${input?.episodeTitle || ""}`);
+}
+
+function removeUnrequestedWellText(value, input, index, max = 900) {
+  const text = cleanText(value || "", max);
+  if (inputAllowsWell(input)) return text;
+  const replacement = themeMotif(input?.theme, index);
+  return cleanText(text
+    .replace(/\b(?:sumur\s*(?:tua|belakang)?|old\s+well|closed\s+old\s+well|water\s+well|well\s+surface|well-like\s+object|well)\b/gi, replacement)
+    .replace(/\bpermukaan\s+air\s+gelap\b/gi, replacement)
+    .replace(/\s{2,}/g, " "), max);
 }
 
 function titleFromFocus(value) {
@@ -729,7 +752,7 @@ function storyboardObject(item, part, beat, input) {
   const fallback = defaultStoryboardBeat(part, beat, input);
   const beatText = cleanText(item.beat || fallback.beat, 140);
   const narration = sanitizeNarrationForSpeech(cleanText(item.narration || fallback.narration || beatText, 260), input);
-  const imagePrompt = cleanText(item.imagePrompt || storyboardImagePrompt(beatText, input, beat), 420);
+  const imagePrompt = removeUnrequestedWellText(item.imagePrompt || storyboardImagePrompt(beatText, input, beat), input, beat - 1, 420);
   return {
     beat: beatText,
     narration,
@@ -805,7 +828,7 @@ function defaultStoryboardBeat(part, beat, input) {
 }
 
 function defaultPartSummary(part, input) {
-  const focus = input.theme === "rumah" ? "rumah kosong, sumur, dan jendela gelap" : "gangguan utama";
+  const focus = input.theme === "rumah" ? "rumah kosong, pintu belakang, dan jendela gelap" : "gangguan utama";
   if (part === input.totalParts) return `Misteri ${focus} mencapai titik akhir dan semua tanda dari episode sebelumnya kembali menyatu.`;
   return `Gangguan dari ${focus} makin dekat, meninggalkan petunjuk baru yang membuat tokoh utama sulit mundur.`;
 }
@@ -817,7 +840,7 @@ function defaultPartCliffhanger(part, input) {
     "Bayangan di jendela bergerak sebelum lampu padam.",
     "Rekaman memutar suara yang belum pernah diucapkan.",
     "Pintu tua terbuka pelan dari sisi dalam.",
-    "Jejak basah muncul dan mengarah kembali ke sumur.",
+    "Jejak basah muncul dan mengarah kembali ke pintu belakang.",
     "Nama tokoh utama terdengar dari ruang yang terkunci."
   ];
   return beats[(part - 1) % beats.length];
@@ -873,11 +896,17 @@ function fallbackEpisodeTitle(template, input) {
 }
 
 function pickFallbackTemplate(input, memory) {
-  const byTheme = fallbackTemplates.filter((template) => template.theme === input.theme);
-  const candidates = [...byTheme, ...fallbackTemplates].filter((template, index, list) => {
+  const allowWell = inputAllowsWell(input);
+  const usableTemplates = fallbackTemplates.filter((template) => allowWell || !templateMentionsWell(template));
+  const byTheme = usableTemplates.filter((template) => template.theme === input.theme);
+  const candidates = [...byTheme, ...usableTemplates].filter((template, index, list) => {
     return list.findIndex((item) => item.title === template.title) === index;
   });
   return candidates.find((template) => !memory.titles.has(normalizeKey(template.title))) || candidates[0] || fallbackTemplates[0];
+}
+
+function templateMentionsWell(template) {
+  return /\bsumur\b/i.test(JSON.stringify(template || {}));
 }
 
 function makeUniqueTitle(title, memory, input) {

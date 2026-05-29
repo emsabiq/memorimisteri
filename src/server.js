@@ -490,9 +490,12 @@ async function generateImageWithRetry({ story, scene, size, quality }) {
 function safePromptForScene(story, scene) {
   const character = story.input?.protagonistProfile || "Andi, pria Indonesia muda memakai jaket denim gelap, kaos hitam, celana cargo hitam, membawa smartphone dan senter kecil";
   const sceneIndex = Number(scene.index || 0);
+  const inputText = `${story.input?.idea || ""} ${story.input?.seasonTitle || ""} ${story.input?.episodeTitle || ""}`;
+  const sceneText = `${inputText} ${scene.screenText || ""} ${scene.narration || ""} ${scene.imagePrompt || ""}`;
+  const allowsWell = /\bsumur\b/i.test(inputText);
   const atmosphericShots = [
-    "wide atmospheric shot with no visible person, focus on the old Indonesian house, rice field mist, doorway, and negative space",
-    "object detail shot with no full person, focus on a phone screen, small flashlight beam, old door, cracked window, or well surface",
+    "wide atmospheric shot with no visible person, focus on the exact Indonesian location, mist, doorway, and negative space",
+    "object detail shot with no full person, focus on a phone screen, small flashlight beam, old door, cracked window, or scene-specific prop",
     "POV flashlight shot, only a hand, phone, or small flashlight may appear, no face required",
     "distant silhouette optional and small in frame, atmosphere and location remain the main subject"
   ];
@@ -501,7 +504,9 @@ function safePromptForScene(story, scene) {
     shot,
     `if the script absolutely requires Andi, show only a small safe distant silhouette with this continuity: ${character}`,
     `scene mood: ${scene.screenText || story.title}`,
-    "old empty house near rice field, closed old well nearby only as background object, no person inside the well",
+    allowsWell && /\bsumur\b/i.test(sceneText)
+      ? "old well may appear only when it is the explicit scene object, with no person inside it"
+      : "use only the requested location and props; avoid unrelated circular stone structures, water pits, or extra background objects",
     "moody blue-green night lighting, soft mist, visible main subject, readable silhouette, cinematic phone-screen composition",
     "vertical 9:16, high detail, dark but not underexposed, no text, no logo, no celebrity, no gore, no extra human figures, no human-shaped ghost, no injury, no trapped person, no drowning, no fall, no violence, no self-harm"
   ].join(", ");
